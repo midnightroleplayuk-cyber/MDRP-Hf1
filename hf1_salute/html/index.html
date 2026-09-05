@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        let audio = null;
+
+        window.addEventListener('message', function(event) {
+            if (event.data.action === 'playMusic') {
+                if (audio) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+                audio = new Audio('salute.ogg');
+                audio.volume = event.data.volume || 0.3;
+                audio.play();
+            } else if (event.data.action === 'stopMusic') {
+                if (audio) {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            }
+        });
+    </script>
+</head>
+<body>
+</body>
+</html>
