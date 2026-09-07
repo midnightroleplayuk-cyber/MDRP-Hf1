@@ -4,7 +4,6 @@
 
 local signs = {}
 local signById = {}
-local duiCache = {}
 local nearbyIds = {}
 local lastSpatialUpdate = 0
 local requestBusy = false
@@ -360,101 +359,130 @@ local function imageUrlDialog()
 end
 
 -- =========================================================
--- DUI MANAGEMENT
+-- RUNTIME IMAGE TEXTURE MANAGEMENT (NO DUI)
 -- =========================================================
+-- Images are fetched by the server and sent to the client as a data URL.
+-- FiveM then decodes the image into a normal runtime texture. This avoids
+-- the browser/DUI texture lifecycle entirely.
 
-local function destroyDui(id)
-    local cached = duiCache[id]
-    if not cached then return end
+local imageCache = {}
+local imageRequests = {}
+local textureSession = ('%x'):format(GetGameTimer())
 
-    if cached.dui then
-        -- ox_lib owns the DUI object, runtime TXD and texture lifecycle.
-        cached.dui:remove()
-    end
-
-    duiCache[id] = nil
+local function destroyTexture(id)
+    -- FiveM does not expose a per-runtime-texture destroy native. Dropping our
+    -- references is still important so the render/cache logic stops using it.
+    imageCache[id] = nil
+    imageRequests[id] = nil
 end
 
-local function destroyAllDuis()
-    for id in pairs(duiCache) do
-        destroyDui(id)
-    end
+local function destroyAllTextures()
+    imageCache = {}
+    imageRequests = {}
 end
 
-local function getActiveDuiCount()
+local function getActiveTextureCount()
     local count = 0
-    for _ in pairs(duiCache) do
+    for _ in pairs(imageCache) do
         count += 1
     end
     return count
 end
 
-local function urlEncode(value)
-    return tostring(value):gsub('([^%w%-_%.~])', function(char)
-        return string.format('%%%02X', string.byte(char))
-    end)
+local function requestImage(sign)
+    local id = tonumber(sign.id)
+    if not id or imageRequests[id] then return end
+
+    imageRequests[id] = {
+        url = sign.image_url,
+        requestedAt = GetGameTimer()
+    }
+
+    TriggerServerEvent('hf1_signs:requestImageData', id, sign.image_url)
 end
 
-local function getOrCreateDui(sign)
+RegisterNetEvent('hf1_signs:imageData', function(id, url, dataUrl)
+    id = tonumber(id)
+    if not id then return end
+
+    local sign = signById[id]
+    if not sign or sign.image_url ~= url then
+        imageRequests[id] = nil
+        return
+    end
+
+    if type(dataUrl) ~= 'string' or not dataUrl:find('^data:image/') then
+        imageRequests[id] = nil
+        print(('^1[hf1_signs] Invalid image payload received for sign %s^0'):format(id))
+        return
+    end
+
+    local txdName = ('hf1_signs_%s_%s'):format(textureSession, id)
+    local txnName = 'image'
+    local runtimeTxd = CreateRuntimeTxd(txdName)
+    local texture = CreateRuntimeTextureFromImage(runtimeTxd, txnName, dataUrl)
+
+    if not texture then
+        imageRequests[id] = nil
+        print(('^1[hf1_signs] CreateRuntimeTextureFromImage failed for sign %s^0'):format(id))
+        return
+    end
+
+    imageCache[id] = {
+        txd = txdName,
+        txn = txnName,
+        texture = texture,
+        url = url,
+        ready = true,
+        lastUsed = GetGameTimer()
+    }
+
+    imageRequests[id] = nil
+    print(('^2[hf1_signs] Runtime image ready for sign %s^0'):format(id))
+end)
+
+RegisterNetEvent('hf1_signs:imageError', function(id, message)
+    id = tonumber(id)
+    if id then imageRequests[id] = nil end
+    print(('^1[hf1_signs] Image fetch failed for sign %s: %s^0'):format(tostring(id), tostring(message)))
+end)
+
+local function getOrCreateTexture(sign)
     if not validClientUrl(sign.image_url) then
         return nil
     end
 
-    local now = GetGameTimer()
-    local cached = duiCache[sign.id]
+    local id = tonumber(sign.id)
+    if not id then return nil end
 
-    if cached and cached.url == sign.image_url then
+    local now = GetGameTimer()
+    local cached = imageCache[id]
+
+    if cached and cached.url == sign.image_url and cached.ready then
         cached.lastUsed = now
         return cached
     end
 
-    if cached then
-        destroyDui(sign.id)
+    if cached and cached.url ~= sign.image_url then
+        destroyTexture(id)
     end
 
-    if getActiveDuiCount() >= Config.MaxActiveDuis then
+    local pending = imageRequests[id]
+    if pending and pending.url == sign.image_url then
+        -- Retry after 15 seconds if a transfer was interrupted.
+        if (now - pending.requestedAt) > 15000 then
+            imageRequests[id] = nil
+        else
+            return nil
+        end
+    end
+
+    if getActiveTextureCount() >= Config.MaxActiveDuis then
         return nil
     end
 
-    -- Use ox_lib's DUI wrapper instead of manually creating the DUI/TXD.
-    -- This avoids timing/race issues in CreateRuntimeTextureFromDuiHandle.
-    -- nui:// is intentionally used here: this is a local resource page,
-    -- which then loads the external HTTPS image into a full-canvas <img>.
-    local resourceName = GetCurrentResourceName()
-    local wrapperUrl = ('nui://%s/html/index.html?url=%s'):format(
-        resourceName,
-        urlEncode(sign.image_url)
-    )
-
-    local ok, dui = pcall(function()
-        return lib.dui:new({
-            url = wrapperUrl,
-            width = 1024,
-            height = 1024,
-            debug = false
-        })
-    end)
-
-    if not ok or not dui or not dui.dictName or not dui.txtName then
-        print(('^1[hf1_signs] DUI creation failed for sign %s: %s^0'):format(
-            tostring(sign.id),
-            ok and 'missing texture names' or tostring(dui)
-        ))
-        return nil
-    end
-
-    cached = {
-        dui = dui,
-        txd = dui.dictName,
-        txn = dui.txtName,
-        url = sign.image_url,
-        ready = true,
-        textureCreated = true,
-        lastUsed = now
-    }
-
-    duiCache[sign.id] = cached
-    return cached
+    requestImage(sign)
+    return nil
 end
 
 -- =========================================================
@@ -806,11 +834,11 @@ RegisterNetEvent('hf1_signs:sync', function(serverSigns)
     end
 
     -- Drop cached textures for deleted signs or changed URLs.
-    for id, cached in pairs(duiCache) do
+    for id, cached in pairs(imageCache) do
         local sign = signById[id]
 
         if not sign or sign.image_url ~= cached.url then
-            destroyDui(id)
+            destroyTexture(id)
         end
     end
 
@@ -860,7 +888,7 @@ CreateThread(function()
             local sign = signById[id]
 
             if sign then
-                local cached = getOrCreateDui(sign)
+                local cached = getOrCreateTexture(sign)
 
                 if cached then
                     sleep = 0
@@ -868,13 +896,6 @@ CreateThread(function()
 
                     drawSign3D(sign, cached)
                 end
-            end
-        end
-
-        -- Gracefully unload inactive browser textures.
-        for id, cached in pairs(duiCache) do
-            if (now - cached.lastUsed) >= Config.DuiUnloadGraceMs then
-                destroyDui(id)
             end
         end
 
@@ -888,6 +909,6 @@ end)
 
 AddEventHandler('onResourceStop', function(resource)
     if resource == GetCurrentResourceName() then
-        destroyAllDuis()
+        destroyAllTextures()
     end
 end)

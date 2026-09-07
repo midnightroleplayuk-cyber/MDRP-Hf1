@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'HF1'
 description 'Qbox flat 2D surface signs'
-version '1.2.7'
+version '1.2.8'
 
 lua54 'yes'
 
@@ -12,10 +12,6 @@ shared_scripts {
     'config.lua'
 }
 
--- Required so the direct-rendered DUI can actually load the local wrapper page.
-files {
-    'html/index.html'
-}
 
 client_scripts {
     'client.lua'

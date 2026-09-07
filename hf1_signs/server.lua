@@ -216,3 +216,124 @@ RegisterNetEvent('hf1_signs:delete', function(id)
         TriggerClientEvent('hf1_signs:notify', src, 'That sign could not be deleted.', 'error')
     end
 end)
+
+
+-- =========================================================
+-- IMAGE FETCH / CACHE
+-- =========================================================
+-- The client renderer intentionally does not use DUI. The server fetches the
+-- remote image and transfers a base64 data URL only when a nearby client asks.
+
+local remoteImageCache = {}
+local pendingImageFetches = {}
+
+local base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+local function base64Encode(data)
+    local out = {}
+    local len = #data
+    local n = 0
+
+    for i = 1, len, 3 do
+        local a = data:byte(i) or 0
+        local b = data:byte(i + 1) or 0
+        local c = data:byte(i + 2) or 0
+        local triple = (a << 16) | (b << 8) | c
+
+        n += 1
+        out[n] = base64Chars:sub(((triple >> 18) & 63) + 1, ((triple >> 18) & 63) + 1)
+        n += 1
+        out[n] = base64Chars:sub(((triple >> 12) & 63) + 1, ((triple >> 12) & 63) + 1)
+        n += 1
+        out[n] = (i + 1 <= len) and base64Chars:sub(((triple >> 6) & 63) + 1, ((triple >> 6) & 63) + 1) or '='
+        n += 1
+        out[n] = (i + 2 <= len) and base64Chars:sub((triple & 63) + 1, (triple & 63) + 1) or '='
+    end
+
+    return table.concat(out)
+end
+
+local function guessMime(url, headers)
+    if type(headers) == 'table' then
+        for key, value in pairs(headers) do
+            if tostring(key):lower() == 'content-type' then
+                local mime = tostring(value):match('^([^;]+)')
+                if mime and mime:find('^image/') then return mime end
+            end
+        end
+    end
+
+    local ext = tostring(url):lower():match('%.([%w]+)[^/]*$')
+    if ext == 'jpg' or ext == 'jpeg' then return 'image/jpeg' end
+    if ext == 'webp' then return 'image/webp' end
+    if ext == 'gif' then return 'image/gif' end
+    return 'image/png'
+end
+
+local function sendImagePayload(src, id, url, payload)
+    -- Latent transfer prevents a larger PNG from choking the normal event channel.
+    TriggerLatentClientEvent('hf1_signs:imageData', src, 750000, id, url, payload)
+end
+
+RegisterNetEvent('hf1_signs:requestImageData', function(id, url)
+    local src = source
+    id = tonumber(id)
+
+    if not id or not validUrl(url) then
+        TriggerClientEvent('hf1_signs:imageError', src, id, 'invalid image URL')
+        return
+    end
+
+    local row = MySQL.single.await(([[
+        SELECT image_url FROM `%s` WHERE id = ? LIMIT 1
+    ]]):format(Config.DatabaseTable), { id })
+
+    if not row or row.image_url ~= url then
+        TriggerClientEvent('hf1_signs:imageError', src, id, 'sign URL no longer matches database')
+        return
+    end
+
+    local cached = remoteImageCache[url]
+    if cached then
+        sendImagePayload(src, id, url, cached)
+        return
+    end
+
+    if pendingImageFetches[url] then
+        pendingImageFetches[url][#pendingImageFetches[url] + 1] = { src = src, id = id }
+        return
+    end
+
+    pendingImageFetches[url] = { { src = src, id = id } }
+
+    PerformHttpRequest(url, function(status, body, headers)
+        local waiting = pendingImageFetches[url] or {}
+        pendingImageFetches[url] = nil
+
+        if status < 200 or status >= 300 or type(body) ~= 'string' or #body == 0 then
+            for _, req in ipairs(waiting) do
+                TriggerClientEvent('hf1_signs:imageError', req.src, req.id, ('HTTP %s'):format(tostring(status)))
+            end
+            return
+        end
+
+        -- Keep accidental enormous files from becoming multi-megabyte net events.
+        if #body > 5 * 1024 * 1024 then
+            for _, req in ipairs(waiting) do
+                TriggerClientEvent('hf1_signs:imageError', req.src, req.id, 'image is larger than 5 MB')
+            end
+            return
+        end
+
+        local mime = guessMime(url, headers)
+        local payload = ('data:%s;base64,%s'):format(mime, base64Encode(body))
+        remoteImageCache[url] = payload
+
+        for _, req in ipairs(waiting) do
+            sendImagePayload(req.src, req.id, url, payload)
+        end
+    end, 'GET', '', {
+        ['User-Agent'] = 'hf1_signs/1.2.8',
+        ['Accept'] = 'image/png,image/jpeg,image/webp,image/gif,*/*;q=0.8'
+    })
+end)

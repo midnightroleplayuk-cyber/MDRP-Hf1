@@ -68,3 +68,6 @@ v1.2.4 texture fix: runtime DUI texture creation no longer depends on the native
 
 
 v1.2.7: Fixed coplanar front/back textured-poly depth fighting; renderer now selects camera-facing triangle winding per frame and uses a safer wall surface offset.
+
+
+v1.2.8: Removed DUI image rendering. Remote images are fetched server-side and converted into persistent FiveM runtime textures on each client.
