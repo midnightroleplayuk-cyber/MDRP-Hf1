@@ -23,11 +23,14 @@ local function validClientUrl(url)
 
     local lower = url:lower()
 
-    if Config.RequireHttps and not lower:find('^https://', 1, true) then
+    if Config.RequireHttps and not lower:find('^https://') then
         return false
     end
 
-    local extension = lower:match('(%.[%w]+)') or ''
+    -- Ignore query strings/fragments when checking the file extension.
+    local cleanUrl = lower:match('^[^?#]+') or lower
+    local extension = cleanUrl:match('(%.[%w]+)$') or ''
+
     return Config.AllowedImageExtensions[extension] == true
 end
 
@@ -553,7 +556,7 @@ local function openCreate()
     if not data then return end
 
     if not validClientUrl(data.image_url) then
-        notify('Use a direct HTTPS image URL with a configured extension such as .png.', 'error')
+        notify('Use a direct HTTPS image URL with a configured image extension such as .png.', 'error')
         return
     end
 

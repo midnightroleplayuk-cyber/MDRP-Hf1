@@ -1,5 +1,6 @@
--- HF1 SIGNS
--- SERVER
+-- =========================================================
+-- HF1 SIGNS - SERVER
+-- =========================================================
 
 local function getIdentifier(src)
     local player = exports.qbx_core:GetPlayer(src)
@@ -11,35 +12,27 @@ local function getIdentifier(src)
     return player.PlayerData.citizenid
 end
 
+-- ONLY identifiers in Config.AllowedLicenses are authorised.
+-- Supports both:
+--   fivem:123456
+-- and:
+--   identifier.fivem:123456
 local function hasAdmin(src)
     if not Config.AllowedLicenses then
         return false
     end
 
     for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
-        -- Exact match.
         if Config.AllowedLicenses[identifier] == true then
             return true
         end
 
-        -- Support FiveM runtime identifier:
-        -- fivem:123456
-        -- when config contains:
-        -- identifier.fivem:123456
         if identifier:sub(1, 6) == 'fivem:' then
-            local configuredIdentifier = 'identifier.' .. identifier
-
-            if Config.AllowedLicenses[configuredIdentifier] == true then
+            if Config.AllowedLicenses['identifier.' .. identifier] == true then
                 return true
             end
-        end
-
-        -- Also support the reverse format in case the config
-        -- contains fivem:123456.
-        if identifier:sub(1, 18) == 'identifier.fivem:' then
-            local configuredIdentifier = identifier:gsub('^identifier%.', '')
-
-            if Config.AllowedLicenses[configuredIdentifier] == true then
+        elseif identifier:sub(1, 17) == 'identifier.fivem:' then
+            if Config.AllowedLicenses[identifier:gsub('^identifier%.', '')] == true then
                 return true
             end
         end
@@ -59,47 +52,27 @@ local function validUrl(url)
 
     local lower = url:lower()
 
-    -- Require HTTPS.
-    -- IMPORTANT: do not use plain=true here because ^ is a Lua pattern.
     if Config.RequireHttps and not lower:find('^https://') then
         return false
     end
 
-    -- Strip query/fragment before checking the extension.
-    -- This allows URLs such as image.png?width=100.
     local cleanUrl = lower:match('^[^?#]+') or lower
     local extension = cleanUrl:match('(%.[%w]+)$') or ''
 
-    if not Config.AllowedImageExtensions[extension] then
-        return false
-    end
-
-    return true
+    return Config.AllowedImageExtensions[extension] == true
 end
 
 local function sanitizeNumber(value, fallback)
     value = tonumber(value)
-
-    if not value then
-        return fallback
-    end
-
-    return value
+    return value or fallback
 end
 
 local function getAllSigns()
     local query = ([[
         SELECT
-            id,
-            owner,
-            label,
-            image_url,
-            x,
-            y,
-            z,
-            width,
-            height,
-            heading,
+            id, owner, label, image_url,
+            x, y, z, width, height, heading,
+            normal_x, normal_y, normal_z,
             view_distance
         FROM `%s`
         ORDER BY id DESC
@@ -116,12 +89,7 @@ RegisterNetEvent('hf1_signs:requestOpen', function()
     local src = source
 
     if not hasAdmin(src) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'You do not have permission to use /sign.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'You do not have permission to use /sign.', 'error')
         return
     end
 
@@ -137,136 +105,69 @@ RegisterNetEvent('hf1_signs:create', function(data)
     local src = source
 
     if not hasAdmin(src) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'You do not have permission to create signs.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'You do not have permission to create signs.', 'error')
         return
     end
 
-    if type(data) ~= 'table' then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid sign data.',
-            'error'
-        )
-        return
-    end
-
-    if not validUrl(data.image_url) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid image URL. Use a direct HTTPS image URL such as a .png.',
-            'error'
-        )
+    if type(data) ~= 'table' or not validUrl(data.image_url) then
+        TriggerClientEvent('hf1_signs:notify', src, 'Invalid image URL. Use a direct HTTPS image URL such as a .png.', 'error')
         return
     end
 
     local owner = getIdentifier(src)
-
     if not owner then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Could not identify your Qbox character.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'Could not identify your Qbox character.', 'error')
         return
     end
 
-    local x = sanitizeNumber(data.x)
-    local y = sanitizeNumber(data.y)
-    local z = sanitizeNumber(data.z)
-    local width = sanitizeNumber(data.width)
-    local height = sanitizeNumber(data.height)
+    local x = tonumber(data.x)
+    local y = tonumber(data.y)
+    local z = tonumber(data.z)
+    local width = tonumber(data.width)
+    local height = tonumber(data.height)
 
     if not x or not y or not z or not width or not height then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid sign position or dimensions.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'Invalid sign position or dimensions.', 'error')
         return
     end
 
-    width = math.max(
-        Config.MinSignSize,
-        math.min(Config.MaxSignSize, width)
-    )
-
-    height = math.max(
-        Config.MinSignSize,
-        math.min(Config.MaxSignSize, height)
-    )
+    width = math.max(Config.MinSignSize, math.min(Config.MaxSignSize, width))
+    height = math.max(Config.MinSignSize, math.min(Config.MaxSignSize, height))
 
     local heading = sanitizeNumber(data.heading, 0.0)
+    local distance = sanitizeNumber(data.view_distance, Config.DefaultViewDistance)
+    distance = math.max(Config.MinViewDistance, math.min(Config.MaxViewDistance, distance))
 
-    local distance = sanitizeNumber(
-        data.view_distance,
-        Config.DefaultViewDistance
-    )
+    local nx = sanitizeNumber(data.normal_x, 0.0)
+    local ny = sanitizeNumber(data.normal_y, 1.0)
+    local nz = sanitizeNumber(data.normal_z, 0.0)
 
-    distance = math.max(
-        Config.MinViewDistance,
-        math.min(Config.MaxViewDistance, distance)
-    )
-
-    local label = tostring(
-        data.label or 'Custom Sign'
-    ):sub(1, 100)
+    local label = tostring(data.label or 'Custom Sign'):sub(1, 100)
 
     local query = ([[
         INSERT INTO `%s`
         (
-            owner,
-            label,
-            image_url,
-            x,
-            y,
-            z,
-            width,
-            height,
-            heading,
+            owner, label, image_url,
+            x, y, z, width, height, heading,
+            normal_x, normal_y, normal_z,
             view_distance
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]]):format(Config.DatabaseTable)
 
     local id = MySQL.insert.await(query, {
-        owner,
-        label,
-        data.image_url,
-        x,
-        y,
-        z,
-        width,
-        height,
-        heading,
+        owner, label, data.image_url,
+        x, y, z, width, height, heading,
+        nx, ny, nz,
         distance
     })
 
     if not id then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Failed to save the sign to the database.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'Failed to save the sign to the database.', 'error')
         return
     end
 
-    TriggerClientEvent(
-        'hf1_signs:notify',
-        src,
-        'Sign created successfully.',
-        'success'
-    )
-
+    TriggerClientEvent('hf1_signs:notify', src, 'Sign created successfully.', 'success')
     syncAll()
 end)
 
@@ -274,26 +175,12 @@ RegisterNetEvent('hf1_signs:update', function(id, data)
     local src = source
 
     if not hasAdmin(src) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'You do not have permission to edit signs.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'You do not have permission to edit signs.', 'error')
         return
     end
 
-    if type(data) ~= 'table' then
-        return
-    end
-
-    if not validUrl(data.image_url) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid image URL. Use a direct HTTPS image URL such as a .png.',
-            'error'
-        )
+    if type(data) ~= 'table' or not validUrl(data.image_url) then
+        TriggerClientEvent('hf1_signs:notify', src, 'Invalid image URL. Use a direct HTTPS image URL such as a .png.', 'error')
         return
     end
 
@@ -301,36 +188,17 @@ RegisterNetEvent('hf1_signs:update', function(id, data)
     id = tonumber(id)
 
     if not owner or not id then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid sign ID.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'Invalid sign ID.', 'error')
         return
     end
 
-    local distance = sanitizeNumber(
-        data.view_distance,
-        Config.DefaultViewDistance
-    )
+    local distance = sanitizeNumber(data.view_distance, Config.DefaultViewDistance)
+    distance = math.max(Config.MinViewDistance, math.min(Config.MaxViewDistance, distance))
 
-    distance = math.max(
-        Config.MinViewDistance,
-        math.min(Config.MaxViewDistance, distance)
-    )
-
-    local label = tostring(
-        data.label or 'Custom Sign'
-    ):sub(1, 100)
+    local label = tostring(data.label or 'Custom Sign'):sub(1, 100)
 
     local where = 'id = ?'
-    local params = {
-        label,
-        data.image_url,
-        distance,
-        id
-    }
+    local params = { label, data.image_url, distance, id }
 
     if Config.OwnershipOnly then
         where = where .. ' AND owner = ?'
@@ -339,34 +207,17 @@ RegisterNetEvent('hf1_signs:update', function(id, data)
 
     local query = ([[
         UPDATE `%s`
-        SET
-            label = ?,
-            image_url = ?,
-            view_distance = ?
+        SET label = ?, image_url = ?, view_distance = ?
         WHERE %s
-    ]]):format(
-        Config.DatabaseTable,
-        where
-    )
+    ]]):format(Config.DatabaseTable, where)
 
     local affected = MySQL.update.await(query, params)
 
     if affected and affected > 0 then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Sign updated successfully.',
-            'success'
-        )
-
+        TriggerClientEvent('hf1_signs:notify', src, 'Sign updated successfully.', 'success')
         syncAll()
     else
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'That sign could not be updated.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'That sign could not be updated.', 'error')
     end
 end)
 
@@ -374,12 +225,7 @@ RegisterNetEvent('hf1_signs:delete', function(id)
     local src = source
 
     if not hasAdmin(src) then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'You do not have permission to delete signs.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'You do not have permission to delete signs.', 'error')
         return
     end
 
@@ -387,12 +233,7 @@ RegisterNetEvent('hf1_signs:delete', function(id)
     id = tonumber(id)
 
     if not owner or not id then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Invalid sign ID.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'Invalid sign ID.', 'error')
         return
     end
 
@@ -407,28 +248,14 @@ RegisterNetEvent('hf1_signs:delete', function(id)
     local query = ([[
         DELETE FROM `%s`
         WHERE %s
-    ]]):format(
-        Config.DatabaseTable,
-        where
-    )
+    ]]):format(Config.DatabaseTable, where)
 
     local affected = MySQL.update.await(query, params)
 
     if affected and affected > 0 then
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'Sign deleted successfully.',
-            'success'
-        )
-
+        TriggerClientEvent('hf1_signs:notify', src, 'Sign deleted successfully.', 'success')
         syncAll()
     else
-        TriggerClientEvent(
-            'hf1_signs:notify',
-            src,
-            'That sign could not be deleted.',
-            'error'
-        )
+        TriggerClientEvent('hf1_signs:notify', src, 'That sign could not be deleted.', 'error')
     end
 end)
