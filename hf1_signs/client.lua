@@ -505,17 +505,16 @@ end
 -- physically flat against the wall/surface.
 -- =========================================================
 
-local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn, normal)
+local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn)
     DrawTexturedPoly(
         a.x, a.y, a.z,
         b.x, b.y, b.z,
         c.x, c.y, c.z,
-        normal.x, normal.y, normal.z,
         255, 255, 255, 255,
+        txd, txn,
         uvA.x, uvA.y, 1.0,
         uvB.x, uvB.y, 1.0,
-        uvC.x, uvC.y, 1.0,
-        txd, txn
+        uvC.x, uvC.y, 1.0
     )
 end
 
@@ -540,8 +539,7 @@ local function drawSign3D(sign, cached)
         width,
         height,
         right,
-        up,
-        normal
+        up
     )
 
     -- Front face.
@@ -553,8 +551,7 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 0.0),
         vector2(1.0, 1.0),
         cached.txd,
-        cached.txn,
-        normal
+        cached.txn
     )
 
     drawTexturedTriangle(
@@ -565,8 +562,7 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 1.0),
         vector2(0.0, 1.0),
         cached.txd,
-        cached.txn,
-        normal
+        cached.txn
     )
 
     -- Back face as well, so the sign is visible from either side.
@@ -578,8 +574,7 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 1.0),
         vector2(1.0, 0.0),
         cached.txd,
-        cached.txn,
-        normal
+        cached.txn
     )
 
     drawTexturedTriangle(
@@ -590,8 +585,7 @@ local function drawSign3D(sign, cached)
         vector2(0.0, 1.0),
         vector2(1.0, 1.0),
         cached.txd,
-        cached.txn,
-        normal
+        cached.txn
     )
 end
 
@@ -891,9 +885,11 @@ CreateThread(function()
                     sleep = 0
                     cached.lastUsed = now
 
-                    -- True world-space rendering. The sign uses the
-                    -- stored surface normal and stays flat on the wall.
-                    drawSign3D(sign, cached)
+                    -- Only draw once the DUI runtime texture is actually ready.
+                    -- This prevents a blank/solid-colour quad from being shown.
+                    if cached.ready and cached.textureCreated then
+                        drawSign3D(sign, cached)
+                    end
                 end
             end
         end

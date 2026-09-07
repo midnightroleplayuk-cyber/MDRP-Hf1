@@ -41,3 +41,10 @@ Latest correction:
 - Kept the world-space DrawTexturedPoly renderer and DUI texture path.
 - Kept W=1.0 UVW coordinates.
 - Runtime texture is only considered ready when CreateRuntimeTextureFromDuiHandle succeeds.
+
+Latest rendering correction:
+- Corrected DrawTexturedPoly argument order to the FiveM native signature.
+- Removed the surface normal from the texture native arguments; the normal
+  is used only for calculating the world-space plane.
+- The sign is not drawn until its DUI runtime texture is ready, preventing a
+  blank/solid-colour quad from being displayed.
