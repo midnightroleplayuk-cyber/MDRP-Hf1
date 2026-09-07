@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1024,height=1024,initial-scale=1">
+<style>
+html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:transparent}
+img{display:block;width:100vw;height:100vh;margin:0;padding:0;border:0;object-fit:fill;object-position:center center}
+</style>
+</head>
+<body>
+<img id="sign" alt="">
+<script>
+const url = new URLSearchParams(window.location.search).get('url');
+if (url) document.getElementById('sign').src = url;
+</script>
+</body>
+</html>

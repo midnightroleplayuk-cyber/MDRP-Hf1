@@ -432,7 +432,22 @@ local function getOrCreateDui(sign)
         return nil
     end
 
-    local dui = CreateDui(sign.image_url, 1024, 1024)
+    -- Use a local HTML wrapper so the source image fills the entire DUI
+    -- canvas. Direct CreateDui(imageUrl) can preserve the source aspect
+    -- ratio and leave black/empty space around non-square images.
+    local function urlEncode(value)
+        return tostring(value):gsub('([^%w%-_%.~])', function(char)
+            return string.format('%%%02X', string.byte(char))
+        end)
+    end
+
+    local resourceName = GetCurrentResourceName()
+    local wrapperUrl = ('https://cfx-nui-%s/html/index.html?url=%s'):format(
+        resourceName,
+        urlEncode(sign.image_url)
+    )
+
+    local dui = CreateDui(wrapperUrl, 1024, 1024)
     if not dui then return nil end
 
     local txdName = ('hf1_sign_txd_%s'):format(sign.id)
