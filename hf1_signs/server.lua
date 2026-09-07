@@ -1,4 +1,3 @@
-```lua
 local function getIdentifier(src)
     local player = exports.qbx_core:GetPlayer(src)
 
@@ -10,23 +9,25 @@ local function getIdentifier(src)
 end
 
 local function hasAdmin(src)
-    -- =========================================================
-    -- QBOX GROUP PERMISSIONS
-    -- =========================================================
-
-    for _, group in ipairs(Config.AdminGroups) do
-        if exports.qbx_core:HasGroup(src, group) then
-            return true
+    -- Qbox group permissions
+    if Config.AdminGroups then
+        for _, group in ipairs(Config.AdminGroups) do
+            if exports.qbx_core:HasGroup(src, group) then
+                return true
+            end
         end
     end
 
-    -- =========================================================
-    -- FIVE-M IDENTIFIER ALLOWLIST
-    -- =========================================================
-
-    for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
-        if Config.AllowedLicenses[identifier] == true then
-            return true
+    -- FiveM identifier allowlist
+    -- Supports:
+    -- identifier.fivem:
+    -- license:
+    -- license2:
+    if Config.AllowedLicenses then
+        for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
+            if Config.AllowedLicenses[identifier] == true then
+                return true
+            end
         end
     end
 
@@ -44,14 +45,14 @@ local function validUrl(url)
 
     local lower = url:lower()
 
-    -- Require HTTPS if enabled in config.
+    -- Require HTTPS if enabled.
     if Config.RequireHttps then
         if not lower:find('^https://', 1, true) then
             return false
         end
     end
 
-    -- Check file extension.
+    -- Check image extension.
     local extension = lower:match('(%.[%w]+)') or ''
 
     if not Config.AllowedImageExtensions[extension] then
@@ -71,17 +72,21 @@ local function sanitizeNumber(value, fallback)
     return value
 end
 
-local function syncAll()
-    local rows = MySQL.query.await(
+local function getAllSigns()
+    return MySQL.query.await(
         ('SELECT id, owner, label, image_url, x, y, z, width, height, heading, view_distance FROM `%s` ORDER BY id DESC'):format(
             Config.DatabaseTable
         )
-    )
+    ) or {}
+end
+
+local function syncAll()
+    local rows = getAllSigns()
 
     TriggerClientEvent(
         'qbox_signs:sync',
         -1,
-        rows or {}
+        rows
     )
 end
 
@@ -116,16 +121,12 @@ end)
 RegisterNetEvent('qbox_signs:requestSync', function()
     local src = source
 
-    local rows = MySQL.query.await(
-        ('SELECT id, owner, label, image_url, x, y, z, width, height, heading, view_distance FROM `%s` ORDER BY id DESC'):format(
-            Config.DatabaseTable
-        )
-    )
+    local rows = getAllSigns()
 
     TriggerClientEvent(
         'qbox_signs:sync',
         src,
-        rows or {}
+        rows
     )
 end)
 
@@ -136,12 +137,26 @@ end)
 RegisterNetEvent('qbox_signs:create', function(data)
     local src = source
 
-    -- Always check permissions server-side.
+    -- Always perform permission validation server-side.
     if not hasAdmin(src) then
+        TriggerClientEvent(
+            'qbox_signs:notify',
+            src,
+            'You do not have permission to create signs.',
+            'error'
+        )
+
         return
     end
 
     if type(data) ~= 'table' then
+        TriggerClientEvent(
+            'qbox_signs:notify',
+            src,
+            'Invalid sign data.',
+            'error'
+        )
+
         return
     end
 
@@ -179,14 +194,14 @@ RegisterNetEvent('qbox_signs:create', function(data)
     local z = sanitizeNumber(data.z)
 
     -- =====================================================
-    -- SIZE
+    -- DIMENSIONS
     -- =====================================================
 
     local width = sanitizeNumber(data.width)
     local height = sanitizeNumber(data.height)
 
     -- =====================================================
-    -- ROTATION
+    -- HEADING
     -- =====================================================
 
     local heading = sanitizeNumber(
@@ -225,7 +240,7 @@ RegisterNetEvent('qbox_signs:create', function(data)
         return
     end
 
-    -- Clamp dimensions server-side.
+    -- Clamp dimensions.
     width = math.max(
         Config.MinSignSize,
         math.min(
@@ -242,7 +257,7 @@ RegisterNetEvent('qbox_signs:create', function(data)
         )
     )
 
-    -- Clamp view distance server-side.
+    -- Clamp viewing distance.
     distance = math.max(
         Config.MinViewDistance,
         math.min(
@@ -295,7 +310,7 @@ RegisterNetEvent('qbox_signs:create', function(data)
         'success'
     )
 
-    -- Push the new sign list to every player.
+    -- Update every player.
     syncAll()
 end)
 
@@ -306,8 +321,14 @@ end)
 RegisterNetEvent('qbox_signs:update', function(id, data)
     local src = source
 
-    -- Server-side permission check.
     if not hasAdmin(src) then
+        TriggerClientEvent(
+            'qbox_signs:notify',
+            src,
+            'You do not have permission to edit signs.',
+            'error'
+        )
+
         return
     end
 
@@ -315,6 +336,7 @@ RegisterNetEvent('qbox_signs:update', function(id, data)
         return
     end
 
+    -- Validate URL.
     if not validUrl(data.image_url) then
         TriggerClientEvent(
             'qbox_signs:notify',
@@ -362,10 +384,6 @@ RegisterNetEvent('qbox_signs:update', function(id, data)
         data.label or 'Custom Sign'
     ):sub(1, 100)
 
-    -- =====================================================
-    -- OWNERSHIP
-    -- =====================================================
-
     local where = 'id = ?'
 
     local params = {
@@ -375,15 +393,11 @@ RegisterNetEvent('qbox_signs:update', function(id, data)
         id
     }
 
+    -- If enabled, only the original creator can edit it.
     if Config.OwnershipOnly then
         where = where .. ' AND owner = ?'
-
         params[#params + 1] = owner
     end
-
-    -- =====================================================
-    -- DATABASE UPDATE
-    -- =====================================================
 
     local affected = MySQL.update.await(
         ('UPDATE `%s` SET label = ?, image_url = ?, view_distance = ? WHERE %s'):format(
@@ -419,8 +433,14 @@ end)
 RegisterNetEvent('qbox_signs:delete', function(id)
     local src = source
 
-    -- Server-side permission check.
     if not hasAdmin(src) then
+        TriggerClientEvent(
+            'qbox_signs:notify',
+            src,
+            'You do not have permission to delete signs.',
+            'error'
+        )
+
         return
     end
 
@@ -443,25 +463,17 @@ RegisterNetEvent('qbox_signs:delete', function(id)
         return
     end
 
-    -- =====================================================
-    -- OWNERSHIP
-    -- =====================================================
-
     local where = 'id = ?'
 
     local params = {
         id
     }
 
+    -- If enabled, only the original creator can delete it.
     if Config.OwnershipOnly then
         where = where .. ' AND owner = ?'
-
         params[#params + 1] = owner
     end
-
-    -- =====================================================
-    -- DATABASE DELETE
-    -- =====================================================
 
     local affected = MySQL.update.await(
         ('DELETE FROM `%s` WHERE %s'):format(
@@ -479,7 +491,6 @@ RegisterNetEvent('qbox_signs:delete', function(id)
             'success'
         )
 
-        -- Tell all clients to remove the deleted sign.
         syncAll()
     else
         TriggerClientEvent(
@@ -490,4 +501,4 @@ RegisterNetEvent('qbox_signs:delete', function(id)
         )
     end
 end)
-```
+
