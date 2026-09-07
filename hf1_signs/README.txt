@@ -34,3 +34,10 @@ DUI loading fix:
   browser is ready, preventing the silent early-DUI texture race.
 - The world-space quad renderer remains in use, so signs stay flat on the
   stored surface.
+
+Latest correction:
+- Fixed renderer reference from missing getSignBasis() to the existing
+  getSurfaceBasis() helper.
+- Kept the world-space DrawTexturedPoly renderer and DUI texture path.
+- Kept W=1.0 UVW coordinates.
+- Runtime texture is only considered ready when CreateRuntimeTextureFromDuiHandle succeeds.

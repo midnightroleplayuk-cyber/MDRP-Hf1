@@ -409,13 +409,15 @@ local function getOrCreateDui(sign)
             local handle = GetDuiHandle(cached.dui)
 
             if handle and not cached.textureCreated then
-                cached.textureCreated = true
-                CreateRuntimeTextureFromDuiHandle(
+                local textureHandle = CreateRuntimeTextureFromDuiHandle(
                     cached.txd,
                     cached.txn,
                     handle
                 )
-                cached.ready = true
+                if textureHandle then
+                    cached.textureCreated = true
+                    cached.ready = true
+                end
             end
         end
 
@@ -460,13 +462,15 @@ local function getOrCreateDui(sign)
                 local handle = GetDuiHandle(dui)
 
                 if handle then
-                    CreateRuntimeTextureFromDuiHandle(
+                    local textureHandle = CreateRuntimeTextureFromDuiHandle(
                         txd,
                         txnName,
                         handle
                     )
-                    cached.textureCreated = true
-                    cached.ready = true
+                    if textureHandle then
+                        cached.textureCreated = true
+                        cached.ready = true
+                    end
                 end
 
                 break
@@ -525,7 +529,11 @@ local function drawSign3D(sign, cached)
     local width = tonumber(sign.width) or 1.0
     local height = tonumber(sign.height) or 1.0
 
-    local right, up, normal = getSignBasis(sign)
+    local right, up, normal = getSurfaceBasis(vector3(
+        tonumber(sign.normal_x) or 0.0,
+        tonumber(sign.normal_y) or 1.0,
+        tonumber(sign.normal_z) or 0.0
+    ))
 
     local corners = planeCorners(
         center,
