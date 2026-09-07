@@ -501,84 +501,18 @@ end
 -- physically flat against the wall/surface.
 -- =========================================================
 
-local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn)
+local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn, normal)
     DrawTexturedPoly(
         a.x, a.y, a.z,
         b.x, b.y, b.z,
         c.x, c.y, c.z,
+        normal.x, normal.y, normal.z,
         255, 255, 255, 255,
-        txd, txn,
         uvA.x, uvA.y, 1.0,
         uvB.x, uvB.y, 1.0,
-        uvC.x, uvC.y, 1.0
+        uvC.x, uvC.y, 1.0,
+        txd, txn
     )
-end
-
-local function normalizeVector(v)
-    local len = math.sqrt((v.x * v.x) + (v.y * v.y) + (v.z * v.z))
-    if len < 0.00001 then
-        return vector3(0.0, 1.0, 0.0)
-    end
-    return vector3(v.x / len, v.y / len, v.z / len)
-end
-
-local function cross(a, b)
-    return vector3(
-        (a.y * b.z) - (a.z * b.y),
-        (a.z * b.x) - (a.x * b.z),
-        (a.x * b.y) - (a.y * b.x)
-    )
-end
-
-local function getSignBasis(sign)
-    local normal = normalizeVector(vector3(
-        tonumber(sign.normal_x) or 0.0,
-        tonumber(sign.normal_y) or 1.0,
-        tonumber(sign.normal_z) or 0.0
-    ))
-
-    -- Pick a stable reference axis that is not parallel to the surface normal.
-    local reference = vector3(0.0, 0.0, 1.0)
-    if math.abs(normal.z) > 0.98 then
-        reference = vector3(0.0, 1.0, 0.0)
-    end
-
-    local right = normalizeVector(cross(reference, normal))
-    local up = normalizeVector(cross(normal, right))
-
-    -- Preserve the sign's saved heading as a rotation around its surface normal.
-    local heading = math.rad(tonumber(sign.heading) or 0.0)
-    local cosH = math.cos(heading)
-    local sinH = math.sin(heading)
-
-    local rotatedRight = vector3(
-        (right.x * cosH) + (up.x * sinH),
-        (right.y * cosH) + (up.y * sinH),
-        (right.z * cosH) + (up.z * sinH)
-    )
-
-    local rotatedUp = vector3(
-        (up.x * cosH) - (right.x * sinH),
-        (up.y * cosH) - (right.y * sinH),
-        (up.z * cosH) - (right.z * sinH)
-    )
-
-    return rotatedRight, rotatedUp, normal
-end
-
-local function planeCorners(center, width, height, right, up, normal)
-    local offset = Config.SurfaceOffset or 0.008
-    local c = center + (normal * offset)
-
-    local hw = width * 0.5
-    local hh = height * 0.5
-
-    return {
-        c - (right * hw) + (up * hh),
-        c + (right * hw) + (up * hh),
-        c - (right * hw) - (up * hh),
-        c + (right * hw) - (up * hh)
-    }
 end
 
 local function drawSign3D(sign, cached)
@@ -611,7 +545,8 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 0.0),
         vector2(1.0, 1.0),
         cached.txd,
-        cached.txn
+        cached.txn,
+        normal
     )
 
     drawTexturedTriangle(
@@ -622,7 +557,8 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 1.0),
         vector2(0.0, 1.0),
         cached.txd,
-        cached.txn
+        cached.txn,
+        normal
     )
 
     -- Back face as well, so the sign is visible from either side.
@@ -634,7 +570,8 @@ local function drawSign3D(sign, cached)
         vector2(1.0, 1.0),
         vector2(1.0, 0.0),
         cached.txd,
-        cached.txn
+        cached.txn,
+        normal
     )
 
     drawTexturedTriangle(
@@ -645,7 +582,8 @@ local function drawSign3D(sign, cached)
         vector2(0.0, 1.0),
         vector2(1.0, 1.0),
         cached.txd,
-        cached.txn
+        cached.txn,
+        normal
     )
 end
 
