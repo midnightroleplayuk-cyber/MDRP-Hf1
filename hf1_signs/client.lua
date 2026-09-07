@@ -410,7 +410,7 @@ local function getOrCreateDui(sign)
 
             if handle and not cached.textureCreated then
                 local textureHandle = CreateRuntimeTextureFromDuiHandle(
-                    cached.txd,
+                    cached.runtimeTxd,
                     cached.txn,
                     handle
                 )
@@ -456,6 +456,9 @@ local function getOrCreateDui(sign)
 
     cached = {
         dui = dui,
+        -- Keep the actual TXD object for CreateRuntimeTextureFromDuiHandle.
+        -- DrawTexturedPoly still receives the TXD name string below.
+        runtimeTxd = txd,
         txd = txdName,
         txn = txnName,
         url = sign.image_url,
