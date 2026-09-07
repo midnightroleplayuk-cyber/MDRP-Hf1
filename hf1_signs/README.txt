@@ -56,3 +56,6 @@ FINAL FIX IN 1.2.1:
 - Fixed the runtime texture dictionary passed to `DrawTexturedPoly`.
   The native expects the texture dictionary NAME (string), not the handle
   returned by `CreateRuntimeTxd()`.
+
+
+v1.2.4 texture fix: runtime DUI texture creation no longer depends on the native return value, which can be nil on some FiveM builds.

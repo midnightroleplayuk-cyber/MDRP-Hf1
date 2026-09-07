@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'HF1'
 description 'Qbox flat 2D surface signs'
-version '1.2.2'
+version '1.2.4'
 
 lua54 'yes'
 

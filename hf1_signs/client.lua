@@ -409,15 +409,16 @@ local function getOrCreateDui(sign)
             local handle = GetDuiHandle(cached.dui)
 
             if handle and not cached.textureCreated then
-                local textureHandle = CreateRuntimeTextureFromDuiHandle(
+                -- CreateRuntimeTextureFromDuiHandle does not reliably return
+                -- a usable success value on all FiveM builds. Calling it is
+                -- sufficient; the runtime texture is then available by name.
+                CreateRuntimeTextureFromDuiHandle(
                     cached.runtimeTxd,
                     cached.txn,
                     handle
                 )
-                if textureHandle then
-                    cached.textureCreated = true
-                    cached.ready = true
-                end
+                cached.textureCreated = true
+                cached.ready = true
             end
         end
 
@@ -480,15 +481,15 @@ local function getOrCreateDui(sign)
                 local handle = GetDuiHandle(dui)
 
                 if handle then
-                    local textureHandle = CreateRuntimeTextureFromDuiHandle(
+                    -- Do not test the native's return value; some builds return
+                    -- nil even though the texture was created successfully.
+                    CreateRuntimeTextureFromDuiHandle(
                         txd,
                         txnName,
                         handle
                     )
-                    if textureHandle then
-                        cached.textureCreated = true
-                        cached.ready = true
-                    end
+                    cached.textureCreated = true
+                    cached.ready = true
                 end
 
                 break
