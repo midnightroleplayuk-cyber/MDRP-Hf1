@@ -27,3 +27,10 @@ No full server restart is normally required.
 Rendering fix:
 - Corrected the DrawTexturedPoly argument order and UVW values so the DUI
   runtime texture is actually sampled by the world-space sign.
+
+
+DUI loading fix:
+- Runtime textures are now created only after IsDuiAvailable reports the
+  browser is ready, preventing the silent early-DUI texture race.
+- The world-space quad renderer remains in use, so signs stay flat on the
+  stored surface.

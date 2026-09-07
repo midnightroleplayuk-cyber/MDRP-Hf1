@@ -3,7 +3,6 @@ Config = {}
 Config.AllowedLicenses = {
     ['identifier.fivem:17286926'] = true, -- Kapper
     ['identifier.fivem:1059188'] = true,  -- Hardy
-    --Add more?
 }
 
 Config.Command = 'sign'

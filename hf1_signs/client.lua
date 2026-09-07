@@ -393,11 +393,33 @@ local function getOrCreateDui(sign)
         return nil
     end
 
+    local now = GetGameTimer()
     local cached = duiCache[sign.id]
 
     if cached and cached.url == sign.image_url then
-        cached.lastUsed = GetGameTimer()
-        return cached
+        cached.lastUsed = now
+
+        -- The browser can take a moment to become available. Do not attempt
+        -- to create the runtime texture until the DUI is ready.
+        if cached.ready and cached.textureCreated then
+            return cached
+        end
+
+        if cached.dui and IsDuiAvailable(cached.dui) then
+            local handle = GetDuiHandle(cached.dui)
+
+            if handle and not cached.textureCreated then
+                cached.textureCreated = true
+                CreateRuntimeTextureFromDuiHandle(
+                    cached.txd,
+                    cached.txn,
+                    handle
+                )
+                cached.ready = true
+            end
+        end
+
+        return cached.ready and cached.textureCreated and cached or nil
     end
 
     if cached then
@@ -411,23 +433,54 @@ local function getOrCreateDui(sign)
     local dui = CreateDui(sign.image_url, 1024, 1024)
     if not dui then return nil end
 
-    local handle = GetDuiHandle(dui)
     local txdName = ('hf1_sign_txd_%s'):format(sign.id)
     local txnName = ('hf1_sign_txn_%s'):format(sign.id)
-
     local txd = CreateRuntimeTxd(txdName)
-    CreateRuntimeTextureFromDuiHandle(txd, txnName, handle)
 
     cached = {
         dui = dui,
-        txd = txdName,
+        txd = txd,
         txn = txnName,
         url = sign.image_url,
-        lastUsed = GetGameTimer()
+        ready = false,
+        textureCreated = false,
+        lastUsed = now
     }
 
     duiCache[sign.id] = cached
-    return cached
+
+    -- Give CEF one frame to initialise before the availability check.
+    -- This avoids the silent DUI -> runtime-texture race on clients where
+    -- CreateRuntimeTextureFromDuiHandle is called too early.
+    CreateThread(function()
+        local timeout = GetGameTimer() + 5000
+
+        while duiCache[sign.id] == cached and not cached.ready do
+            if IsDuiAvailable(dui) then
+                local handle = GetDuiHandle(dui)
+
+                if handle then
+                    CreateRuntimeTextureFromDuiHandle(
+                        txd,
+                        txnName,
+                        handle
+                    )
+                    cached.textureCreated = true
+                    cached.ready = true
+                end
+
+                break
+            end
+
+            if GetGameTimer() >= timeout then
+                break
+            end
+
+            Wait(50)
+        end
+    end)
+
+    return nil
 end
 
 -- =========================================================
