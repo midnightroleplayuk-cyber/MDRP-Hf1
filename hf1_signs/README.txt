@@ -59,3 +59,9 @@ FINAL FIX IN 1.2.1:
 
 
 v1.2.4 texture fix: runtime DUI texture creation no longer depends on the native return value, which can be nil on some FiveM builds.
+
+
+1.2.6 fixes:
+- Replaced manual DUI/TXD creation with ox_lib lib.dui:new().
+- Corrected DrawTexturedPoly UV W component from 1.0 to 0.0.
+- Uses nui:// local wrapper URL and full-canvas image rendering.

@@ -5,14 +5,25 @@
 <meta name="viewport" content="width=1024,height=1024,initial-scale=1">
 <style>
 html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:transparent}
-img{display:block;width:100vw;height:100vh;margin:0;padding:0;border:0;object-fit:fill;object-position:center center}
+#sign{display:block;width:100vw;height:100vh;margin:0;padding:0;border:0;object-fit:fill;object-position:center center}
+#error{display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:#300;color:#fff;font:32px Arial,sans-serif;text-align:center;padding:40px;box-sizing:border-box}
 </style>
 </head>
 <body>
 <img id="sign" alt="">
+<div id="error">IMAGE FAILED TO LOAD</div>
 <script>
+const img = document.getElementById('sign');
+const error = document.getElementById('error');
 const url = new URLSearchParams(window.location.search).get('url');
-if (url) document.getElementById('sign').src = url;
+if (url) {
+  img.onerror = () => { img.style.display = 'none'; error.style.display = 'flex'; };
+  img.src = url;
+} else {
+  img.style.display = 'none';
+  error.textContent = 'NO IMAGE URL';
+  error.style.display = 'flex';
+}
 </script>
 </body>
 </html>

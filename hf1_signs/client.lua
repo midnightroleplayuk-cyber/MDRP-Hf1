@@ -368,7 +368,8 @@ local function destroyDui(id)
     if not cached then return end
 
     if cached.dui then
-        DestroyDui(cached.dui)
+        -- ox_lib owns the DUI object, runtime TXD and texture lifecycle.
+        cached.dui:remove()
     end
 
     duiCache[id] = nil
@@ -388,6 +389,12 @@ local function getActiveDuiCount()
     return count
 end
 
+local function urlEncode(value)
+    return tostring(value):gsub('([^%w%-_%.~])', function(char)
+        return string.format('%%%02X', string.byte(char))
+    end)
+end
+
 local function getOrCreateDui(sign)
     if not validClientUrl(sign.image_url) then
         return nil
@@ -398,31 +405,7 @@ local function getOrCreateDui(sign)
 
     if cached and cached.url == sign.image_url then
         cached.lastUsed = now
-
-        -- The browser can take a moment to become available. Do not attempt
-        -- to create the runtime texture until the DUI is ready.
-        if cached.ready and cached.textureCreated then
-            return cached
-        end
-
-        if cached.dui and IsDuiAvailable(cached.dui) then
-            local handle = GetDuiHandle(cached.dui)
-
-            if handle and not cached.textureCreated then
-                -- CreateRuntimeTextureFromDuiHandle does not reliably return
-                -- a usable success value on all FiveM builds. Calling it is
-                -- sufficient; the runtime texture is then available by name.
-                CreateRuntimeTextureFromDuiHandle(
-                    cached.runtimeTxd,
-                    cached.txn,
-                    handle
-                )
-                cached.textureCreated = true
-                cached.ready = true
-            end
-        end
-
-        return cached.ready and cached.textureCreated and cached or nil
+        return cached
     end
 
     if cached then
@@ -433,77 +416,45 @@ local function getOrCreateDui(sign)
         return nil
     end
 
-    -- Use a local HTML wrapper so the source image fills the entire DUI
-    -- canvas. Direct CreateDui(imageUrl) can preserve the source aspect
-    -- ratio and leave black/empty space around non-square images.
-    local function urlEncode(value)
-        return tostring(value):gsub('([^%w%-_%.~])', function(char)
-            return string.format('%%%02X', string.byte(char))
-        end)
-    end
-
+    -- Use ox_lib's DUI wrapper instead of manually creating the DUI/TXD.
+    -- This avoids timing/race issues in CreateRuntimeTextureFromDuiHandle.
+    -- nui:// is intentionally used here: this is a local resource page,
+    -- which then loads the external HTTPS image into a full-canvas <img>.
     local resourceName = GetCurrentResourceName()
-    local wrapperUrl = ('https://cfx-nui-%s/html/index.html?url=%s'):format(
+    local wrapperUrl = ('nui://%s/html/index.html?url=%s'):format(
         resourceName,
         urlEncode(sign.image_url)
     )
 
-    local dui = CreateDui(wrapperUrl, 1024, 1024)
-    if not dui then return nil end
+    local ok, dui = pcall(function()
+        return lib.dui:new({
+            url = wrapperUrl,
+            width = 1024,
+            height = 1024,
+            debug = false
+        })
+    end)
 
-    local txdName = ('hf1_sign_txd_%s'):format(sign.id)
-    local txnName = ('hf1_sign_txn_%s'):format(sign.id)
-    local txd = CreateRuntimeTxd(txdName)
+    if not ok or not dui or not dui.dictName or not dui.txtName then
+        print(('^1[hf1_signs] DUI creation failed for sign %s: %s^0'):format(
+            tostring(sign.id),
+            ok and 'missing texture names' or tostring(dui)
+        ))
+        return nil
+    end
 
     cached = {
         dui = dui,
-        -- Keep the actual TXD object for CreateRuntimeTextureFromDuiHandle.
-        -- DrawTexturedPoly still receives the TXD name string below.
-        runtimeTxd = txd,
-        txd = txdName,
-        txn = txnName,
+        txd = dui.dictName,
+        txn = dui.txtName,
         url = sign.image_url,
-        ready = false,
-        textureCreated = false,
+        ready = true,
+        textureCreated = true,
         lastUsed = now
     }
 
     duiCache[sign.id] = cached
-
-    -- Give CEF one frame to initialise before the availability check.
-    -- This avoids the silent DUI -> runtime-texture race on clients where
-    -- CreateRuntimeTextureFromDuiHandle is called too early.
-    CreateThread(function()
-        local timeout = GetGameTimer() + 5000
-
-        while duiCache[sign.id] == cached and not cached.ready do
-            if IsDuiAvailable(dui) then
-                local handle = GetDuiHandle(dui)
-
-                if handle then
-                    -- Do not test the native's return value; some builds return
-                    -- nil even though the texture was created successfully.
-                    CreateRuntimeTextureFromDuiHandle(
-                        txd,
-                        txnName,
-                        handle
-                    )
-                    cached.textureCreated = true
-                    cached.ready = true
-                end
-
-                break
-            end
-
-            if GetGameTimer() >= timeout then
-                break
-            end
-
-            Wait(50)
-        end
-    end)
-
-    return nil
+    return cached
 end
 
 -- =========================================================
@@ -531,9 +482,9 @@ local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn)
         c.x, c.y, c.z,
         255, 255, 255, 255,
         txd, txn,
-        uvA.x, uvA.y, 1.0,
-        uvB.x, uvB.y, 1.0,
-        uvC.x, uvC.y, 1.0
+        uvA.x, uvA.y, 0.0,
+        uvB.x, uvB.y, 0.0,
+        uvC.x, uvC.y, 0.0
     )
 end
 
@@ -905,11 +856,7 @@ CreateThread(function()
                     sleep = 0
                     cached.lastUsed = now
 
-                    -- Only draw once the DUI runtime texture is actually ready.
-                    -- This prevents a blank/solid-colour quad from being shown.
-                    if cached.ready and cached.textureCreated then
-                        drawSign3D(sign, cached)
-                    end
+                    drawSign3D(sign, cached)
                 end
             end
         end
