@@ -10,7 +10,7 @@ Config.Command = 'sign'
 
 -- Performance / streaming
 -- Signs outside this distance are not rendered or kept as active DUI textures.
-Config.DefaultViewDistance = 80.0
+Config.DefaultViewDistance = 50.0
 Config.MinViewDistance = 10.0
 Config.MaxViewDistance = 300.0
 
@@ -51,7 +51,7 @@ Config.SelectionColor = { r = 160, g = 80, b = 255, a = 180 }
 Config.SelectionLineColor = { r = 190, g = 110, b = 255, a = 255 }
 
 Config.MaxUrlLength = 2048
-Config.DatabaseTable = 'qbox_signs'
+Config.DatabaseTable = 'hf1_signs'
 
 -- Small server-side cooldown for opening the menu.
 Config.RequestCooldownMs = 750
