@@ -1,4 +1,3 @@
-```lua
 Config = {}
 
 -- Permission groups accepted by /sign.
@@ -115,4 +114,3 @@ Config.RequestCooldownMs = 750
 -- false:
 --   Any authorised admin can edit/delete any sign.
 Config.OwnershipOnly = true
-```
