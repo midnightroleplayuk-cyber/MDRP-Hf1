@@ -17,7 +17,7 @@ lib.callback.register('qbox-coffee-machine:server:reserve', function(source)
     if Config.Price > 0 then
         local balance = exports.qbx_core:GetMoney(source, Config.MoneyType)
         if not balance or balance < Config.Price then
-            exports.qbx_core:Notify(source, ('You need $%s for a coffee.'):format(Config.Price), 'error')
+            exports.qbx_core:Notify(source, ('You need £%s for a coffee.'):format(Config.Price), 'error')
             return false
         end
         if not exports.qbx_core:RemoveMoney(source, Config.MoneyType, Config.Price, 'coffee-machine') then
