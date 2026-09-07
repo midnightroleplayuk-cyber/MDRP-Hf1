@@ -34,3 +34,7 @@ DUI loading fix:
   browser is ready, preventing the silent early-DUI texture race.
 - The world-space quad renderer remains in use, so signs stay flat on the
   stored surface.
+
+Latest fix:
+- Restored the missing getSignBasis/planeCorners helpers required by the
+  world-space renderer. This fixes the nil global error at getSignBasis.
