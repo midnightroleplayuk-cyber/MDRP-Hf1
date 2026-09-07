@@ -1,10 +1,13 @@
+-- =========================================================
+-- HF1 SIGNS - CLIENT
+-- =========================================================
+
 local signs = {}
 local signById = {}
 local duiCache = {}
 local nearbyIds = {}
 local lastProjection = {}
 local lastSpatialUpdate = 0
-local lastFrameCoords = nil
 local requestBusy = false
 
 local function notify(description, type)
@@ -17,6 +20,7 @@ end
 
 local function validClientUrl(url)
     if type(url) ~= 'string' then return false end
+
     local lower = url:lower()
 
     if Config.RequireHttps and not lower:find('^https://', 1, true) then
@@ -43,7 +47,12 @@ local function rotationToDirection(rot)
     local z = math.rad(rot.z)
     local x = math.rad(rot.x)
     local cosX = math.abs(math.cos(x))
-    return vector3(-math.sin(z) * cosX, math.cos(z) * cosX, math.sin(x))
+
+    return vector3(
+        -math.sin(z) * cosX,
+        math.cos(z) * cosX,
+        math.sin(x)
+    )
 end
 
 local function raycastFromCamera(distance)
@@ -55,67 +64,173 @@ local function raycastFromCamera(distance)
     local ray = StartShapeTestRay(
         camCoord.x, camCoord.y, camCoord.z,
         dest.x, dest.y, dest.z,
-        511, PlayerPedId(), 0
+        511,
+        PlayerPedId(),
+        0
     )
-    local _, hit, endCoords = GetShapeTestResult(ray)
 
-    return hit == 1, endCoords
+    local _, hit, endCoords, surfaceNormal = GetShapeTestResult(ray)
+
+    return hit == 1, endCoords, surfaceNormal
 end
 
-local function drawSelection(a, b)
-    local minX, maxX = math.min(a.x, b.x), math.max(a.x, b.x)
-    local minY, maxY = math.min(a.y, b.y), math.max(a.y, b.y)
-    local minZ, maxZ = math.min(a.z, b.z), math.max(a.z, b.z)
+local function dot(a, b)
+    return a.x * b.x + a.y * b.y + a.z * b.z
+end
 
-    local points = {
-        vector3(minX, minY, minZ), vector3(maxX, minY, minZ),
-        vector3(maxX, maxY, minZ), vector3(minX, maxY, minZ),
-        vector3(minX, minY, maxZ), vector3(maxX, minY, maxZ),
-        vector3(maxX, maxY, maxZ), vector3(minX, maxY, maxZ)
-    }
+local function length(v)
+    return math.sqrt(dot(v, v))
+end
 
-    local edges = {
-        {1,2},{2,3},{3,4},{4,1},
-        {5,6},{6,7},{7,8},{8,5},
-        {1,5},{2,6},{3,7},{4,8}
-    }
-
-    for _, edge in ipairs(edges) do
-        local p1, p2 = points[edge[1]], points[edge[2]]
-        DrawLine(
-            p1.x,p1.y,p1.z,
-            p2.x,p2.y,p2.z,
-            Config.SelectionLineColor.r,
-            Config.SelectionLineColor.g,
-            Config.SelectionLineColor.b,
-            Config.SelectionLineColor.a
-        )
+local function normalize(v)
+    local l = length(v)
+    if l < 0.0001 then
+        return vector3(0.0, 0.0, 0.0)
     end
 
-    local center = vector3(
-        (minX + maxX) / 2,
-        (minY + maxY) / 2,
-        (minZ + maxZ) / 2
-    )
-
-    DrawMarker(28, center.x, center.y, center.z, 0,0,0, 0,0,0,
-        maxX-minX, maxY-minY, maxZ-minZ,
-        Config.SelectionColor.r, Config.SelectionColor.g, Config.SelectionColor.b, 70,
-        false, false, 2, false, nil, nil, false)
+    return vector3(v.x / l, v.y / l, v.z / l)
 end
 
+local function cross(a, b)
+    return vector3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    )
+end
+
+-- Builds a stable 2D coordinate system directly on the hit surface.
+-- This is what makes the sign a flat plane rather than a 3D box.
+local function getSurfaceBasis(normal)
+    normal = normalize(normal)
+
+    if length(normal) < 0.0001 then
+        normal = vector3(0.0, 1.0, 0.0)
+    end
+
+    -- Prefer world-up for walls so signs remain upright.
+    local worldUp = vector3(0.0, 0.0, 1.0)
+    local up = worldUp - normal * dot(worldUp, normal)
+
+    -- Floors/ceilings don't have a useful world-up projected onto them.
+    if length(up) < 0.05 then
+        local cameraRot = GetGameplayCamRot(2)
+        local cameraForward = rotationToDirection(cameraRot)
+        up = cameraForward - normal * dot(cameraForward, normal)
+    end
+
+    up = normalize(up)
+
+    -- Right vector lies on the same surface plane.
+    local right = normalize(cross(up, normal))
+
+    if length(right) < 0.05 then
+        right = vector3(1.0, 0.0, 0.0)
+    end
+
+    -- Re-orthogonalise up for numerical stability.
+    up = normalize(cross(normal, right))
+
+    return right, up, normal
+end
+
+local function planeCorners(center, width, height, right, up, normal)
+    local halfW = width / 2.0
+    local halfH = height / 2.0
+    local offset = normal * Config.SurfaceOffset
+
+    return {
+        center + (-right * halfW) + (up * halfH) + offset,
+        center + ( right * halfW) + (up * halfH) + offset,
+        center + (-right * halfW) + (-up * halfH) + offset,
+        center + ( right * halfW) + (-up * halfH) + offset
+    }
+end
+
+local function drawLine(a, b)
+    DrawLine(
+        a.x, a.y, a.z,
+        b.x, b.y, b.z,
+        Config.SelectionLineColor.r,
+        Config.SelectionLineColor.g,
+        Config.SelectionLineColor.b,
+        Config.SelectionLineColor.a
+    )
+end
+
+local function drawFlatSelection(center, width, height, right, up, normal)
+    local corners = planeCorners(center, width, height, right, up, normal)
+
+    drawLine(corners[1], corners[2])
+    drawLine(corners[2], corners[4])
+    drawLine(corners[4], corners[3])
+    drawLine(corners[3], corners[1])
+
+    -- Crosshair through the centre makes the surface orientation obvious.
+    local markerSize = math.min(width, height) * 0.08
+    local markerA = center - right * markerSize
+    local markerB = center + right * markerSize
+    local markerC = center - up * markerSize
+    local markerD = center + up * markerSize
+
+    drawLine(markerA, markerB)
+    drawLine(markerC, markerD)
+
+    DrawMarker(
+        28,
+        center.x, center.y, center.z,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        markerSize, markerSize, markerSize,
+        Config.SelectionColor.r,
+        Config.SelectionColor.g,
+        Config.SelectionColor.b,
+        90,
+        false, false, 2, false, nil, nil, false
+    )
+end
+
+-- =========================================================
+-- 2D SURFACE PLACEMENT
+-- =========================================================
+--
+-- The first click establishes the surface and its top-left point.
+-- The second point is projected onto the same surface plane.
+-- Width/height are therefore measured ON THE WALL, not through
+-- 3D world XYZ axes.
+-- =========================================================
+
 local function selectTwoCorners()
-    notify('Aim at the top-left corner and press E.', 'inform')
-    local first
+    notify('Aim at the top-left corner of the wall and press E.', 'inform')
+
+    local first = nil
+    local surfaceNormal = nil
+    local right = nil
+    local up = nil
 
     while not first do
         Wait(0)
-        local hit, coords = raycastFromCamera(50.0)
+
+        local hit, coords, normal = raycastFromCamera(Config.PlacementRayDistance)
 
         if hit then
-            DrawMarker(28, coords.x, coords.y, coords.z, 0,0,0,0,0,0,
-                0.08,0.08,0.08, 190,90,255,220, false,false,2,false,nil,nil,false)
-            drawText3D(coords + vector3(0,0,0.15), 'TOP LEFT - press E')
+            local r, u, n = getSurfaceBasis(normal)
+            right, up, surfaceNormal = r, u, n
+
+            DrawMarker(
+                28,
+                coords.x, coords.y, coords.z,
+                0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0,
+                0.08, 0.08, 0.08,
+                Config.SelectionColor.r,
+                Config.SelectionColor.g,
+                Config.SelectionColor.b,
+                220,
+                false, false, 2, false, nil, nil, false
+            )
+
+            drawText3D(coords + surfaceNormal * 0.15, 'TOP LEFT - press E')
         end
 
         if IsControlJustReleased(0, 38) and hit then
@@ -127,20 +242,50 @@ local function selectTwoCorners()
         end
     end
 
-    notify('Aim at the bottom-right corner and press E.', 'inform')
-    local second
+    notify('Aim at the bottom-right corner and press E. The preview stays flat on the same surface.', 'inform')
+
+    local second = nil
 
     while not second do
         Wait(0)
-        local hit, coords = raycastFromCamera(50.0)
+
+        local hit, coords = raycastFromCamera(Config.PlacementRayDistance)
 
         if hit then
-            drawSelection(first, coords)
-            drawText3D(coords + vector3(0,0,0.15), 'BOTTOM RIGHT - press E')
-        end
+            -- Project the current hit point onto the original surface.
+            local relative = coords - first
+            local horizontal = dot(relative, right)
+            local vertical = dot(relative, up)
 
-        if IsControlJustReleased(0, 38) and hit then
-            second = coords
+            -- Keep the second point on the original surface plane.
+            local projected = first + right * horizontal + up * vertical
+            local center = first + right * (horizontal / 2.0) + up * (vertical / 2.0)
+
+            local width = math.abs(horizontal)
+            local height = math.abs(vertical)
+
+            if width >= Config.MinSignSize and height >= Config.MinSignSize then
+                drawFlatSelection(
+                    center,
+                    width,
+                    height,
+                    right,
+                    up,
+                    surfaceNormal
+                )
+            end
+
+            drawText3D(projected + surfaceNormal * 0.15, 'BOTTOM RIGHT - press E')
+
+            if IsControlJustReleased(0, 38) then
+                if width < Config.MinSignSize or height < Config.MinSignSize then
+                    notify('The sign is too small.', 'error')
+                elseif width > Config.MaxSignSize or height > Config.MaxSignSize then
+                    notify('That sign is larger than the configured maximum.', 'error')
+                else
+                    second = projected
+                end
+            end
         end
 
         if IsControlJustReleased(0, 177) then
@@ -148,28 +293,34 @@ local function selectTwoCorners()
         end
     end
 
-    local width = math.abs(second.x - first.x)
-    local height = math.abs(second.z - first.z)
+    local relative = second - first
+    local horizontal = dot(relative, right)
+    local vertical = dot(relative, up)
+    local width = math.abs(horizontal)
+    local height = math.abs(vertical)
 
-    if width < Config.MinSignSize or height < Config.MinSignSize then
-        notify('The sign is too small.', 'error')
-        return nil
-    end
+    local center = first + right * (horizontal / 2.0) + up * (vertical / 2.0)
 
-    if width > Config.MaxSignSize or height > Config.MaxSignSize then
-        notify('That sign is larger than the configured maximum.', 'error')
-        return nil
-    end
+    -- Face the player by default. The stored normal is authoritative
+    -- for the actual surface orientation.
+    local heading = math.deg(math.atan2(surfaceNormal.y, surfaceNormal.x)) - 90.0
 
     return {
-        x = (first.x + second.x) / 2,
-        y = (first.y + second.y) / 2,
-        z = (first.z + second.z) / 2,
+        x = center.x,
+        y = center.y,
+        z = center.z,
         width = width,
         height = height,
-        heading = GetEntityHeading(PlayerPedId())
+        heading = heading,
+        normal_x = surfaceNormal.x,
+        normal_y = surfaceNormal.y,
+        normal_z = surfaceNormal.z
     }
 end
+
+-- =========================================================
+-- IMAGE DIALOG
+-- =========================================================
 
 local function imageUrlDialog()
     local input = lib.inputDialog('New Sign', {
@@ -208,6 +359,10 @@ local function imageUrlDialog()
     }
 end
 
+-- =========================================================
+-- DUI MANAGEMENT
+-- =========================================================
+
 local function destroyDui(id)
     local cached = duiCache[id]
     if not cached then return end
@@ -218,6 +373,12 @@ local function destroyDui(id)
 
     duiCache[id] = nil
     lastProjection[id] = nil
+end
+
+local function destroyAllDuis()
+    for id in pairs(duiCache) do
+        destroyDui(id)
+    end
 end
 
 local function getActiveDuiCount()
@@ -234,6 +395,7 @@ local function getOrCreateDui(sign)
     end
 
     local cached = duiCache[sign.id]
+
     if cached and cached.url == sign.image_url then
         cached.lastUsed = GetGameTimer()
         return cached
@@ -251,8 +413,8 @@ local function getOrCreateDui(sign)
     if not dui then return nil end
 
     local handle = GetDuiHandle(dui)
-    local txdName = ('qbox_sign_txd_%s'):format(sign.id)
-    local txnName = ('qbox_sign_txn_%s'):format(sign.id)
+    local txdName = ('hf1_sign_txd_%s'):format(sign.id)
+    local txnName = ('hf1_sign_txn_%s'):format(sign.id)
 
     local txd = CreateRuntimeTxd(txdName)
     CreateRuntimeTextureFromDuiHandle(txd, txnName, handle)
@@ -269,11 +431,9 @@ local function getOrCreateDui(sign)
     return cached
 end
 
-local function destroyAllDuis()
-    for id in pairs(duiCache) do
-        destroyDui(id)
-    end
-end
+-- =========================================================
+-- PROJECTION
+-- =========================================================
 
 local function projectWorldPoint(coords)
     local ok, sx, sy = GetScreenCoordFromWorldCoord(coords.x, coords.y, coords.z)
@@ -281,39 +441,74 @@ local function projectWorldPoint(coords)
     return sx, sy
 end
 
+local function getSignBasis(sign)
+    local normal = vector3(
+        tonumber(sign.normal_x) or 0.0,
+        tonumber(sign.normal_y) or 1.0,
+        tonumber(sign.normal_z) or 0.0
+    )
+
+    return getSurfaceBasis(normal)
+end
+
 local function calculateProjection(sign)
     local center = vector3(sign.x, sign.y, sign.z)
-    local halfW = sign.width / 2.0
-    local halfH = sign.height / 2.0
+    local width = tonumber(sign.width) or 1.0
+    local height = tonumber(sign.height) or 1.0
 
-    local tlx, tly = projectWorldPoint(center + vector3(-halfW, 0.0, halfH))
-    local trx, try = projectWorldPoint(center + vector3(halfW, 0.0, halfH))
-    local blx, bly = projectWorldPoint(center + vector3(-halfW, 0.0, -halfH))
-    local brx, bry = projectWorldPoint(center + vector3(halfW, 0.0, -halfH))
+    local right, up, normal = getSignBasis(sign)
+    local corners = planeCorners(center, width, height, right, up, normal)
 
-    if not (tlx and trx and blx and brx) then
+    local projected = {}
+
+    for i = 1, 4 do
+        local sx, sy = projectWorldPoint(corners[i])
+        if not sx then return nil end
+        projected[i] = { x = sx, y = sy }
+    end
+
+    local minX = projected[1].x
+    local maxX = projected[1].x
+    local minY = projected[1].y
+    local maxY = projected[1].y
+
+    for i = 2, 4 do
+        minX = math.min(minX, projected[i].x)
+        maxX = math.max(maxX, projected[i].x)
+        minY = math.min(minY, projected[i].y)
+        maxY = math.max(maxY, projected[i].y)
+    end
+
+    local screenWidth = maxX - minX
+    local screenHeight = maxY - minY
+
+    if screenWidth < Config.MinScreenSize or screenHeight < Config.MinScreenSize then
         return nil
     end
 
-    local minX = math.min(tlx, trx, blx, brx)
-    local maxX = math.max(tlx, trx, blx, brx)
-    local minY = math.min(tly, try, bly, bry)
-    local maxY = math.max(tly, try, bly, bry)
-
-    local width = maxX - minX
-    local height = maxY - minY
-
-    if width < Config.MinScreenSize or height < Config.MinScreenSize then
-        return nil
-    end
+    -- DrawSprite is a screen-space primitive, so use the projected
+    -- surface rectangle's bounding box and rotate it to the wall's
+    -- projected angle. This keeps the image aligned to the wall plane
+    -- without requiring a streamed 3D prop/model for every sign.
+    local topLeft = projected[1]
+    local topRight = projected[2]
+    local angle = math.deg(math.atan2(
+        topRight.y - topLeft.y,
+        topRight.x - topLeft.x
+    ))
 
     return {
         x = (minX + maxX) / 2.0,
         y = (minY + maxY) / 2.0,
-        width = width,
-        height = height
+        width = screenWidth,
+        height = screenHeight,
+        rotation = angle
     }
 end
+
+-- =========================================================
+-- SPATIAL FILTER
+-- =========================================================
 
 local function rebuildNearby()
     local ped = PlayerPedId()
@@ -325,11 +520,12 @@ local function rebuildNearby()
         local dx = coords.x - sign.x
         local dy = coords.y - sign.y
         local dz = coords.z - sign.z
+        local distanceSq = dx * dx + dy * dy + dz * dz
 
-        if (dx * dx + dy * dy + dz * dz) <= (maxDistance * maxDistance) then
+        if distanceSq <= maxDistance * maxDistance then
             candidates[#candidates + 1] = {
                 id = sign.id,
-                distanceSq = dx * dx + dy * dy + dz * dz
+                distanceSq = distanceSq
             }
         end
     end
@@ -339,10 +535,15 @@ local function rebuildNearby()
     end)
 
     nearbyIds = {}
+
     for i = 1, math.min(#candidates, Config.MaxActiveDuis) do
         nearbyIds[i] = candidates[i].id
     end
 end
+
+-- =========================================================
+-- CREATE
+-- =========================================================
 
 local function openCreate()
     local placement = selectTwoCorners()
@@ -356,15 +557,25 @@ local function openCreate()
         return
     end
 
-    TriggerServerEvent('qbox_signs:create', {
+    TriggerServerEvent('hf1_signs:create', {
         label = data.label,
         image_url = data.image_url,
         view_distance = data.view_distance,
-        x = placement.x, y = placement.y, z = placement.z,
-        width = placement.width, height = placement.height,
-        heading = placement.heading
+        x = placement.x,
+        y = placement.y,
+        z = placement.z,
+        width = placement.width,
+        height = placement.height,
+        heading = placement.heading,
+        normal_x = placement.normal_x,
+        normal_y = placement.normal_y,
+        normal_z = placement.normal_z
     })
 end
+
+-- =========================================================
+-- MANAGEMENT MENU
+-- =========================================================
 
 local function openManage()
     local options = {}
@@ -372,17 +583,39 @@ local function openManage()
     for _, sign in pairs(signs) do
         options[#options + 1] = {
             title = sign.label,
-            description = ('ID %s • %.1fm view distance'):format(sign.id, sign.view_distance),
+            description = ('ID %s • %.1fm view distance'):format(
+                sign.id,
+                tonumber(sign.view_distance) or Config.DefaultViewDistance
+            ),
             icon = 'image',
             onSelect = function()
                 local input = lib.inputDialog('Edit Sign', {
-                    { type = 'input', label = 'Label', default = sign.label, required = true, max = 100 },
-                    { type = 'input', label = 'Image URL', default = sign.image_url, required = true, max = Config.MaxUrlLength },
-                    { type = 'number', label = 'View distance', default = sign.view_distance, min = Config.MinViewDistance, max = Config.MaxViewDistance, precision = 1 }
+                    {
+                        type = 'input',
+                        label = 'Label',
+                        default = sign.label,
+                        required = true,
+                        max = 100
+                    },
+                    {
+                        type = 'input',
+                        label = 'Image URL',
+                        default = sign.image_url,
+                        required = true,
+                        max = Config.MaxUrlLength
+                    },
+                    {
+                        type = 'number',
+                        label = 'View distance',
+                        default = sign.view_distance,
+                        min = Config.MinViewDistance,
+                        max = Config.MaxViewDistance,
+                        precision = 1
+                    }
                 })
 
                 if input then
-                    TriggerServerEvent('qbox_signs:update', sign.id, {
+                    TriggerServerEvent('hf1_signs:update', sign.id, {
                         label = input[1],
                         image_url = input[2],
                         view_distance = input[3]
@@ -393,16 +626,20 @@ local function openManage()
     end
 
     if #options == 0 then
-        options[1] = { title = 'No signs found', disabled = true }
+        options[1] = {
+            title = 'No signs found',
+            disabled = true
+        }
     end
 
     lib.registerContext({
-        id = 'qbox_signs_manage',
+        id = 'hf1_signs_manage',
         title = 'Manage Signs',
-        menu = 'qbox_signs_main',
+        menu = 'hf1_signs_main',
         options = options
     })
-    lib.showContext('qbox_signs_manage')
+
+    lib.showContext('hf1_signs_manage')
 end
 
 local function openDelete()
@@ -423,52 +660,80 @@ local function openDelete()
                 })
 
                 if confirm == 'confirm' then
-                    TriggerServerEvent('qbox_signs:delete', sign.id)
+                    TriggerServerEvent('hf1_signs:delete', sign.id)
                 end
             end
         }
     end
 
     if #options == 0 then
-        options[1] = { title = 'No signs found', disabled = true }
+        options[1] = {
+            title = 'No signs found',
+            disabled = true
+        }
     end
 
     lib.registerContext({
-        id = 'qbox_signs_delete',
+        id = 'hf1_signs_delete',
         title = 'Delete Sign',
-        menu = 'qbox_signs_main',
+        menu = 'hf1_signs_main',
         options = options
     })
-    lib.showContext('qbox_signs_delete')
+
+    lib.showContext('hf1_signs_delete')
 end
 
 local function openMain()
     lib.registerContext({
-        id = 'qbox_signs_main',
+        id = 'hf1_signs_main',
         title = 'Sign Management',
         options = {
-            { title = 'New Sign', description = 'Place a new image sign in the world', icon = 'plus', onSelect = openCreate },
-            { title = 'Manage Signs', description = 'Edit your custom signs', icon = 'list', onSelect = openManage },
-            { title = 'Delete Sign', description = 'Permanently remove a sign', icon = 'trash', onSelect = openDelete }
+            {
+                title = 'New Sign',
+                description = 'Place a flat image sign on a wall or other surface',
+                icon = 'plus',
+                onSelect = openCreate
+            },
+            {
+                title = 'Manage Signs',
+                description = 'Edit your custom signs',
+                icon = 'list',
+                onSelect = openManage
+            },
+            {
+                title = 'Delete Sign',
+                description = 'Permanently remove a sign',
+                icon = 'trash',
+                onSelect = openDelete
+            }
         }
     })
-    lib.showContext('qbox_signs_main')
+
+    lib.showContext('hf1_signs_main')
 end
+
+-- =========================================================
+-- COMMAND
+-- =========================================================
 
 RegisterCommand(Config.Command, function()
     if requestBusy then return end
 
     requestBusy = true
-    TriggerServerEvent('qbox_signs:requestOpen')
+    TriggerServerEvent('hf1_signs:requestOpen')
 
     SetTimeout(Config.RequestCooldownMs, function()
         requestBusy = false
     end)
 end, false)
 
-RegisterNetEvent('qbox_signs:open', openMain)
+-- =========================================================
+-- EVENTS
+-- =========================================================
 
-RegisterNetEvent('qbox_signs:sync', function(serverSigns)
+RegisterNetEvent('hf1_signs:open', openMain)
+
+RegisterNetEvent('hf1_signs:sync', function(serverSigns)
     signs = serverSigns or {}
     signById = {}
 
@@ -479,23 +744,33 @@ RegisterNetEvent('qbox_signs:sync', function(serverSigns)
     -- Drop cached textures for deleted signs or changed URLs.
     for id, cached in pairs(duiCache) do
         local sign = signById[id]
+
         if not sign or sign.image_url ~= cached.url then
             destroyDui(id)
         end
     end
 
     nearbyIds = {}
+    lastProjection = {}
     lastSpatialUpdate = 0
 end)
 
-RegisterNetEvent('qbox_signs:notify', function(msg, type)
+RegisterNetEvent('hf1_signs:notify', function(msg, type)
     notify(msg, type)
 end)
 
+-- =========================================================
+-- INITIAL SYNC
+-- =========================================================
+
 CreateThread(function()
     Wait(1000)
-    TriggerServerEvent('qbox_signs:requestSync')
+    TriggerServerEvent('hf1_signs:requestSync')
 end)
+
+-- =========================================================
+-- SPATIAL UPDATE LOOP
+-- =========================================================
 
 CreateThread(function()
     while true do
@@ -509,6 +784,10 @@ CreateThread(function()
     end
 end)
 
+-- =========================================================
+-- RENDER LOOP
+-- =========================================================
+
 CreateThread(function()
     while true do
         local sleep = 500
@@ -518,16 +797,17 @@ CreateThread(function()
             local sign = signById[id]
 
             if sign then
-                local dui = getOrCreateDui(sign)
+                local cached = getOrCreateDui(sign)
 
-                if dui then
+                if cached then
                     sleep = 0
-                    dui.lastUsed = now
+                    cached.lastUsed = now
 
                     local projection = lastProjection[id]
 
                     if not projection or (now - projection.time) >= Config.ProjectionUpdateMs then
                         local calculated = calculateProjection(sign)
+
                         if calculated then
                             calculated.time = now
                             lastProjection[id] = calculated
@@ -539,14 +819,14 @@ CreateThread(function()
 
                     if projection then
                         DrawSprite(
-                            dui.txd,
-                            dui.txn,
+                            cached.txd,
+                            cached.txn,
                             projection.x,
                             projection.y,
                             projection.width,
                             projection.height,
-                            0.0,
-                            255,255,255,255
+                            projection.rotation,
+                            255, 255, 255, 255
                         )
                     end
                 end
@@ -563,6 +843,10 @@ CreateThread(function()
         Wait(sleep)
     end
 end)
+
+-- =========================================================
+-- CLEANUP
+-- =========================================================
 
 AddEventHandler('onResourceStop', function(resource)
     if resource == GetCurrentResourceName() then

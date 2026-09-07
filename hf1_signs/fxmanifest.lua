@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'HF1'
-description 'QBOX Custom Signs Placement and Persistence'
-version '1.0.0'
+description 'Qbox flat surface image signs with ox_lib management and persistent MySQL storage'
+version '1.1.0'
 
 lua54 'yes'
 
@@ -23,5 +23,6 @@ server_scripts {
 
 dependencies {
     'ox_lib',
-    'oxmysql'
+    'oxmysql',
+    'qbx_core'
 }

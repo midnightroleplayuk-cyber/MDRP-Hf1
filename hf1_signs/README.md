@@ -1,123 +1,75 @@
-# Qbox Signs — Optimised Edition
+# HF1 Signs
 
-Admin-only `/sign` system for Qbox using ox_lib, oxmysql and FiveM DUI/runtime textures.
+Qbox/FiveM admin-managed image signs using ox_lib, DUI textures and persistent MySQL storage.
 
-## Included
+## Features
 
 - `/sign` command
-- Server-side Qbox admin permission checks
-- ox_lib menus:
-  - New Sign
-  - Manage Signs
-  - Delete Sign
-- Two-corner placement with a purple live selection preview
-- Direct remote image URLs with `.png` support
+- Strict identifier allowlist for Kapper and Hardy
+- ox_lib management menu
+- New Sign / Manage Signs / Delete Sign
+- Wall/surface-based 2D placement
+- Purple flat rectangle placement preview
+- Two-corner sizing directly on the hit surface
+- Direct HTTPS PNG/JPG/JPEG/WEBP/GIF image URLs
 - Persistent MySQL storage
-- World image rendering using DUI/runtime textures
-- Distance-based sign streaming
-- Candidate refresh throttling
-- Projection throttling
-- Active DUI/browser texture cap
-- DUI cache grace period to reduce create/destroy churn
-- Server-side URL, size and distance validation
-
-## Performance target
-
-The client does **not** create a DUI for all 250 signs.
-
-The resource first filters signs by their configured viewing distance every `Config.SpatialUpdateMs`
-milliseconds. It then keeps at most `Config.MaxActiveDuis` image/browser textures active for the
-client, prioritising the nearest signs.
-
-Screen projection is recalculated at `Config.ProjectionUpdateMs`, rather than doing four world-to-
-screen calculations for every sign on every frame. The final texture draw is only performed for
-currently nearby/active signs.
-
-For a 100-player server with roughly 250 signs distributed around the map, this keeps the normal
-case small because each player only processes signs close enough to their current location.
-
-### Recommended starting values
-
-```lua
-Config.DefaultViewDistance = 80.0
-Config.MaxActiveDuis = 12
-Config.SpatialUpdateMs = 250
-Config.ProjectionUpdateMs = 100
-Config.DuiUnloadGraceMs = 15000
-```
-
-If your server has dense areas with many signs, `MaxActiveDuis` is the main client-side safety cap.
-
-## Image URLs
-
-Use direct image URLs, preferably HTTPS:
-
-- `https://example.com/my-sign.png`
-
-The server stores the URL in MySQL; it does not download or proxy the image. This keeps server
-bandwidth and storage use low.
-
-The remote host must allow the image to be loaded by FiveM's embedded browser. An image URL that
-requires authentication, cookies, or a short-lived session may not work.
+- Configurable view distance
+- DUI caching and a hard per-client active-DUI limit
+- Throttled spatial/projection calculations
+- Automatic cleanup when signs are deleted or images change
 
 ## Installation
 
-1. Put `qbox_signs` in your resources folder.
-2. Import `sql/qbox_signs.sql`.
-3. Ensure dependencies before this resource:
+1. Put `hf1_signs` into your resources folder.
+2. Import `sql/hf1_signs.sql` into your database.
+3. Ensure dependencies are started first:
 
 ```cfg
-ensure oxmysql
 ensure ox_lib
+ensure oxmysql
 ensure qbx_core
-ensure qbox_signs
+ensure hf1_signs
 ```
 
-4. Edit `config.lua`.
-5. Restart the resource/server.
-6. An authorised staff member can use `/sign`.
+4. Restart the resource/server.
 
 ## Permissions
 
-Edit:
+`config.lua` contains only the two authorised identifiers:
 
 ```lua
-Config.AdminGroups = {
-    'admin',
-    'god'
+Config.AllowedLicenses = {
+    ['identifier.fivem:17286926'] = true, -- Kapper
+    ['identifier.fivem:1059188'] = true,  -- Hardy
 }
 ```
 
-The resource checks the Qbox group server-side both when opening the menu and when creating,
-editing or deleting signs.
+The server checks exact identifiers returned by FiveM and automatically handles the runtime `fivem:` form as well.
 
-## Ownership
+No Qbox `admin`/`god` group is required for this resource.
 
-By default:
+## Placement
 
-```lua
-Config.OwnershipOnly = true
-```
+Use `/sign` -> `New Sign`.
 
-An admin can manage signs they created. If you want authorised admins to manage every sign:
+1. Aim at the top-left point of the wall/surface and press **E**.
+2. Aim at the bottom-right point and press **E**.
+3. The preview is constrained to the original surface, so the rectangle remains flat against the wall rather than forming a 3D box.
+4. Enter the label, image URL and view distance.
+5. The sign is saved to MySQL and synchronised to all players.
 
-```lua
-Config.OwnershipOnly = false
-```
+The resource stores the surface normal (`normal_x`, `normal_y`, `normal_z`) so the sign can retain its wall orientation after a restart.
 
-## Persistence
+## Existing database warning
 
-Signs survive server restarts because their position, size, image URL, owner and view distance
-are stored in `qbox_signs`.
+If you already have signs in an older `qbox_signs` table, back up the database before migrating. The included SQL contains commented migration statements, but new installations should simply import `hf1_signs.sql`.
 
-The actual image file is not stored in SQL. Only the URL is stored, which is considerably cheaper
-for a server than downloading and serving up to 250 external images itself.
+## Performance defaults
 
-## Notes
+- Default view distance: 50.0m
+- Maximum active DUI textures per client: 12
+- Spatial update: 250ms
+- Projection update: 100ms
+- DUI unload grace period: 15 seconds
 
-The current placement workflow is designed around a horizontal/vertical world rectangle and uses
-the selected world X/Z dimensions. The image renderer is intentionally client-side so the server
-does not need to stream image bytes to 100 players.
-
-If you later want arbitrary wall angles/orientation, the placement model can be extended to store
-a plane normal/rotation without changing the database persistence concept.
+The database can contain many signs, while clients only activate nearby signs up to the configured DUI limit.
