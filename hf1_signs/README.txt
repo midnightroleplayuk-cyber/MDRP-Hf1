@@ -23,3 +23,7 @@ Replace the resource files and run:
 restart hf1_signs
 
 No full server restart is normally required.
+
+Rendering fix:
+- Corrected the DrawTexturedPoly argument order and UVW values so the DUI
+  runtime texture is actually sampled by the world-space sign.

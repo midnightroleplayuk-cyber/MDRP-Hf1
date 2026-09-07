@@ -453,11 +453,11 @@ local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn)
         a.x, a.y, a.z,
         b.x, b.y, b.z,
         c.x, c.y, c.z,
-        uvA.x, uvA.y,
-        uvB.x, uvB.y,
-        uvC.x, uvC.y,
         255, 255, 255, 255,
-        txd, txn
+        txd, txn,
+        uvA.x, uvA.y, 0.0,
+        uvB.x, uvB.y, 0.0,
+        uvC.x, uvC.y, 0.0
     )
 end
 
