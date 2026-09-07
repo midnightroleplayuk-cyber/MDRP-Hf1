@@ -48,3 +48,11 @@ Latest rendering correction:
   is used only for calculating the world-space plane.
 - The sign is not drawn until its DUI runtime texture is ready, preventing a
   blank/solid-colour quad from being displayed.
+
+
+FINAL FIX IN 1.2.1:
+- Fixed the client.lua line-140 crash by actually passing `normal` into
+  `planeCorners()` from `drawSign3D()`.
+- Fixed the runtime texture dictionary passed to `DrawTexturedPoly`.
+  The native expects the texture dictionary NAME (string), not the handle
+  returned by `CreateRuntimeTxd()`.

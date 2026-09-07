@@ -441,7 +441,7 @@ local function getOrCreateDui(sign)
 
     cached = {
         dui = dui,
-        txd = txd,
+        txd = txdName,
         txn = txnName,
         url = sign.image_url,
         ready = false,
@@ -539,7 +539,8 @@ local function drawSign3D(sign, cached)
         width,
         height,
         right,
-        up
+        up,
+        normal
     )
 
     -- Front face.
