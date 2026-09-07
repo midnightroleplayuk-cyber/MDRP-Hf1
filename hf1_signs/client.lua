@@ -513,51 +513,61 @@ local function drawSign3D(sign, cached)
         normal
     )
 
-    -- Front face.
-    drawTexturedTriangle(
-        corners[1],
-        corners[2],
-        corners[4],
-        vector2(0.0, 0.0),
-        vector2(1.0, 0.0),
-        vector2(1.0, 1.0),
-        cached.txd,
-        cached.txn
-    )
+    -- DRAW_TEXTURED_POLY is one-sided. Do NOT draw both windings on the
+    -- exact same plane: that causes coplanar depth fighting and was the
+    -- reason signs could flash for a frame and then disappear.
+    -- Pick the winding that faces the current camera instead.
+    local cam = GetGameplayCamCoord()
+    local toCamera = cam - center
+    local cameraOnNormalSide = dot(toCamera, normal) >= 0.0
 
-    drawTexturedTriangle(
-        corners[1],
-        corners[4],
-        corners[3],
-        vector2(0.0, 0.0),
-        vector2(1.0, 1.0),
-        vector2(0.0, 1.0),
-        cached.txd,
-        cached.txn
-    )
+    if cameraOnNormalSide then
+        -- Winding facing +normal / camera side.
+        drawTexturedTriangle(
+            corners[1],
+            corners[4],
+            corners[2],
+            vector2(0.0, 0.0),
+            vector2(1.0, 1.0),
+            vector2(1.0, 0.0),
+            cached.txd,
+            cached.txn
+        )
 
-    -- Back face as well, so the sign is visible from either side.
-    drawTexturedTriangle(
-        corners[1],
-        corners[4],
-        corners[2],
-        vector2(0.0, 0.0),
-        vector2(1.0, 1.0),
-        vector2(1.0, 0.0),
-        cached.txd,
-        cached.txn
-    )
+        drawTexturedTriangle(
+            corners[1],
+            corners[3],
+            corners[4],
+            vector2(0.0, 0.0),
+            vector2(0.0, 1.0),
+            vector2(1.0, 1.0),
+            cached.txd,
+            cached.txn
+        )
+    else
+        -- Reverse winding when viewing the opposite side.
+        drawTexturedTriangle(
+            corners[1],
+            corners[2],
+            corners[4],
+            vector2(0.0, 0.0),
+            vector2(1.0, 0.0),
+            vector2(1.0, 1.0),
+            cached.txd,
+            cached.txn
+        )
 
-    drawTexturedTriangle(
-        corners[1],
-        corners[3],
-        corners[4],
-        vector2(0.0, 0.0),
-        vector2(0.0, 1.0),
-        vector2(1.0, 1.0),
-        cached.txd,
-        cached.txn
-    )
+        drawTexturedTriangle(
+            corners[1],
+            corners[4],
+            corners[3],
+            vector2(0.0, 0.0),
+            vector2(1.0, 1.0),
+            vector2(0.0, 1.0),
+            cached.txd,
+            cached.txn
+        )
+    end
 end
 
 -- =========================================================

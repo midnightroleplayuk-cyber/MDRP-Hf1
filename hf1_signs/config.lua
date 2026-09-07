@@ -19,7 +19,7 @@ Config.MinScreenSize = 0.003
 
 Config.MinSignSize = 0.25
 Config.MaxSignSize = 25.0
-Config.SurfaceOffset = 0.008
+Config.SurfaceOffset = 0.03
 Config.PlacementRayDistance = 1000.0
 
 Config.RequireHttps = true

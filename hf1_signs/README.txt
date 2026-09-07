@@ -65,3 +65,6 @@ v1.2.4 texture fix: runtime DUI texture creation no longer depends on the native
 - Replaced manual DUI/TXD creation with ox_lib lib.dui:new().
 - Corrected DrawTexturedPoly UV W component from 1.0 to 0.0.
 - Uses nui:// local wrapper URL and full-canvas image rendering.
+
+
+v1.2.7: Fixed coplanar front/back textured-poly depth fighting; renderer now selects camera-facing triangle winding per frame and uses a safer wall surface offset.
