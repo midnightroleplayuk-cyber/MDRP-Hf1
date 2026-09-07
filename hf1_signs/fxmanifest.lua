@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'HF1'
-description 'Qbox flat 2D surface signs with ox_lib and oxmysql'
-version '1.1.0'
+description 'Qbox flat 2D surface signs'
+version '1.2.0'
 
 lua54 'yes'
 

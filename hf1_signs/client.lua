@@ -6,7 +6,6 @@ local signs = {}
 local signById = {}
 local duiCache = {}
 local nearbyIds = {}
-local lastProjection = {}
 local lastSpatialUpdate = 0
 local requestBusy = false
 
@@ -27,10 +26,8 @@ local function validClientUrl(url)
         return false
     end
 
-    -- Ignore query strings/fragments when checking the file extension.
     local cleanUrl = lower:match('^[^?#]+') or lower
     local extension = cleanUrl:match('(%.[%w]+)$') or ''
-
     return Config.AllowedImageExtensions[extension] == true
 end
 
@@ -375,7 +372,6 @@ local function destroyDui(id)
     end
 
     duiCache[id] = nil
-    lastProjection[id] = nil
 end
 
 local function destroyAllDuis()
@@ -438,75 +434,99 @@ end
 -- PROJECTION
 -- =========================================================
 
-local function projectWorldPoint(coords)
-    local ok, sx, sy = GetScreenCoordFromWorldCoord(coords.x, coords.y, coords.z)
-    if not ok then return nil end
-    return sx, sy
+-- =========================================================
+-- TRUE 3D SURFACE RENDERING
+-- =========================================================
+--
+-- Do NOT use DrawSprite for the sign itself.
+-- DrawSprite is a screen-space/camera-facing primitive, which makes
+-- a sign appear to move/rotate around the camera when the player moves.
+--
+-- Instead we draw the runtime texture directly onto two world-space
+-- triangles using DrawTexturedPoly. The four vertices are calculated
+-- from the stored surface normal + surface basis, so the image remains
+-- physically flat against the wall/surface.
+-- =========================================================
+
+local function drawTexturedTriangle(a, b, c, uvA, uvB, uvC, txd, txn)
+    DrawTexturedPoly(
+        a.x, a.y, a.z,
+        b.x, b.y, b.z,
+        c.x, c.y, c.z,
+        uvA.x, uvA.y,
+        uvB.x, uvB.y,
+        uvC.x, uvC.y,
+        255, 255, 255, 255,
+        txd, txn
+    )
 end
 
-local function getSignBasis(sign)
-    local normal = vector3(
-        tonumber(sign.normal_x) or 0.0,
-        tonumber(sign.normal_y) or 1.0,
-        tonumber(sign.normal_z) or 0.0
+local function drawSign3D(sign, cached)
+    local center = vector3(
+        tonumber(sign.x) or 0.0,
+        tonumber(sign.y) or 0.0,
+        tonumber(sign.z) or 0.0
     )
 
-    return getSurfaceBasis(normal)
-end
-
-local function calculateProjection(sign)
-    local center = vector3(sign.x, sign.y, sign.z)
     local width = tonumber(sign.width) or 1.0
     local height = tonumber(sign.height) or 1.0
 
     local right, up, normal = getSignBasis(sign)
-    local corners = planeCorners(center, width, height, right, up, normal)
 
-    local projected = {}
+    local corners = planeCorners(
+        center,
+        width,
+        height,
+        right,
+        up,
+        normal
+    )
 
-    for i = 1, 4 do
-        local sx, sy = projectWorldPoint(corners[i])
-        if not sx then return nil end
-        projected[i] = { x = sx, y = sy }
-    end
+    -- Front face.
+    drawTexturedTriangle(
+        corners[1],
+        corners[2],
+        corners[4],
+        vector2(0.0, 0.0),
+        vector2(1.0, 0.0),
+        vector2(1.0, 1.0),
+        cached.txd,
+        cached.txn
+    )
 
-    local minX = projected[1].x
-    local maxX = projected[1].x
-    local minY = projected[1].y
-    local maxY = projected[1].y
+    drawTexturedTriangle(
+        corners[1],
+        corners[4],
+        corners[3],
+        vector2(0.0, 0.0),
+        vector2(1.0, 1.0),
+        vector2(0.0, 1.0),
+        cached.txd,
+        cached.txn
+    )
 
-    for i = 2, 4 do
-        minX = math.min(minX, projected[i].x)
-        maxX = math.max(maxX, projected[i].x)
-        minY = math.min(minY, projected[i].y)
-        maxY = math.max(maxY, projected[i].y)
-    end
+    -- Back face as well, so the sign is visible from either side.
+    drawTexturedTriangle(
+        corners[1],
+        corners[4],
+        corners[2],
+        vector2(0.0, 0.0),
+        vector2(1.0, 1.0),
+        vector2(1.0, 0.0),
+        cached.txd,
+        cached.txn
+    )
 
-    local screenWidth = maxX - minX
-    local screenHeight = maxY - minY
-
-    if screenWidth < Config.MinScreenSize or screenHeight < Config.MinScreenSize then
-        return nil
-    end
-
-    -- DrawSprite is a screen-space primitive, so use the projected
-    -- surface rectangle's bounding box and rotate it to the wall's
-    -- projected angle. This keeps the image aligned to the wall plane
-    -- without requiring a streamed 3D prop/model for every sign.
-    local topLeft = projected[1]
-    local topRight = projected[2]
-    local angle = math.deg(math.atan2(
-        topRight.y - topLeft.y,
-        topRight.x - topLeft.x
-    ))
-
-    return {
-        x = (minX + maxX) / 2.0,
-        y = (minY + maxY) / 2.0,
-        width = screenWidth,
-        height = screenHeight,
-        rotation = angle
-    }
+    drawTexturedTriangle(
+        corners[1],
+        corners[3],
+        corners[4],
+        vector2(0.0, 0.0),
+        vector2(0.0, 1.0),
+        vector2(1.0, 1.0),
+        cached.txd,
+        cached.txn
+    )
 end
 
 -- =========================================================
@@ -556,7 +576,7 @@ local function openCreate()
     if not data then return end
 
     if not validClientUrl(data.image_url) then
-        notify('Use a direct HTTPS image URL with a configured image extension such as .png.', 'error')
+        notify('Use a direct HTTPS image URL with a configured extension such as .png.', 'error')
         return
     end
 
@@ -754,7 +774,6 @@ RegisterNetEvent('hf1_signs:sync', function(serverSigns)
     end
 
     nearbyIds = {}
-    lastProjection = {}
     lastSpatialUpdate = 0
 end)
 
@@ -806,32 +825,9 @@ CreateThread(function()
                     sleep = 0
                     cached.lastUsed = now
 
-                    local projection = lastProjection[id]
-
-                    if not projection or (now - projection.time) >= Config.ProjectionUpdateMs then
-                        local calculated = calculateProjection(sign)
-
-                        if calculated then
-                            calculated.time = now
-                            lastProjection[id] = calculated
-                            projection = calculated
-                        else
-                            projection = nil
-                        end
-                    end
-
-                    if projection then
-                        DrawSprite(
-                            cached.txd,
-                            cached.txn,
-                            projection.x,
-                            projection.y,
-                            projection.width,
-                            projection.height,
-                            projection.rotation,
-                            255, 255, 255, 255
-                        )
-                    end
+                    -- True world-space rendering. The sign uses the
+                    -- stored surface normal and stays flat on the wall.
+                    drawSign3D(sign, cached)
                 end
             end
         end

@@ -1,20 +1,25 @@
-HF1 Signs
+HF1 Signs - 3D wall-flat rendering fix
 
-Fix included:
-- Client and server HTTPS validation now correctly accept valid HTTPS .png URLs.
-- URL extension checking ignores query strings/fragments.
-- Example URL that is accepted:
-  https://iili.io/n32kYbV.png
+The previous implementation used DrawSprite for the sign image.
+DrawSprite is camera-facing screen-space rendering, so the image could
+appear to move around the player when the camera moved.
 
-Other included settings:
-- Database table: hf1_signs
-- Default view distance: 50.0
-- Permissions: only the two configured identifier.fivem IDs
-- Flat 2D surface placement with saved surface normals
+This version renders the runtime texture as two world-space triangles
+using DrawTexturedPoly. The four vertices are generated from the saved
+surface normal and wall basis, so the sign remains flat against the
+surface.
 
-Installation:
-1. Import sql/hf1_signs.sql.
-2. Ensure ox_lib, oxmysql and qbx_core before hf1_signs.
-3. Restart hf1_signs.
+Also included:
+- client + server HTTPS validation fix
+- .png support
+- query-string-safe image extension validation
+- hf1_signs database table
+- 50.0m default view distance
+- identifier.fivem allowlist
+- existing management/delete UI
+- existing performance/DUI limits
 
-If the resource is already running, restart hf1_signs; a full server restart is not normally required.
+Replace the resource files and run:
+restart hf1_signs
+
+No full server restart is normally required.
