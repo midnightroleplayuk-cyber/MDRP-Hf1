@@ -43,7 +43,7 @@ function NPCManagerDB.RowToNpc(row)
 end
 
 function NPCManagerDB.LoadAll()
-    local rows = MySQL.query.await('SELECT * FROM `qbx_npcmanager` ORDER BY `id` ASC') or {}
+    local rows = MySQL.query.await('SELECT * FROM `hf1_npcs` ORDER BY `id` ASC') or {}
     local result = {}
     for i = 1, #rows do
         result[#result + 1] = NPCManagerDB.RowToNpc(rows[i])
@@ -60,7 +60,7 @@ function NPCManagerDB.Insert(data, creator)
     })
 
     return MySQL.insert.await([[
-        INSERT INTO `qbx_npcmanager`
+        INSERT INTO `hf1_npcs`
         (`name`, `model`, `x`, `y`, `z`, `heading`, `scenario`, `anim_dict`, `anim_name`, `anim_flag`,
          `invincible`, `frozen`, `block_events`, `can_ragdoll`, `collision`, `spawn_distance`, `metadata`, `created_by`)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -88,7 +88,7 @@ function NPCManagerDB.Update(data)
     })
 
     return MySQL.update.await([[
-        UPDATE `qbx_npcmanager`
+        UPDATE `hf1_npcs`
         SET `name` = ?, `model` = ?, `x` = ?, `y` = ?, `z` = ?, `heading` = ?,
             `scenario` = ?, `anim_dict` = ?, `anim_name` = ?, `anim_flag` = ?,
             `invincible` = ?, `frozen` = ?, `block_events` = ?, `can_ragdoll` = ?,
@@ -110,5 +110,5 @@ function NPCManagerDB.Update(data)
 end
 
 function NPCManagerDB.Delete(id)
-    return MySQL.update.await('DELETE FROM `qbx_npcmanager` WHERE `id` = ?', { id })
+    return MySQL.update.await('DELETE FROM `hf1_npcs` WHERE `id` = ?', { id })
 end

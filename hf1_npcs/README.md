@@ -1,4 +1,4 @@
-# qbx_npcmanager
+# hf1_npcs
 
 Persistent in-game NPC creator / placer for Qbox.
 
@@ -32,7 +32,7 @@ Optional:
 
 ## Installation
 
-1. Put `qbx_npcmanager` in your resources folder.
+1. Put `hf1_npcs` in your resources folder.
 2. Import `sql/install.sql` into your database.
 3. Ensure dependencies start first:
 
@@ -41,7 +41,7 @@ ensure oxmysql
 ensure ox_lib
 ensure qbx_core
 ensure ox_target
-ensure qbx_npcmanager
+ensure hf1_npcs
 ```
 
 `ox_target` can be omitted if you do not use it.
@@ -49,7 +49,7 @@ ensure qbx_npcmanager
 4. Grant your Qbox admin ACE access:
 
 ```cfg
-add_ace group.admin qbx_npcmanager.admin allow
+add_ace group.admin hf1_npcs.admin allow
 ```
 
 If your server uses another admin principal, grant that principal instead.
@@ -135,7 +135,7 @@ The callback receives:
 Make sure this exists in server.cfg and that your admin system places you in `group.admin`:
 
 ```cfg
-add_ace group.admin qbx_npcmanager.admin allow
+add_ace group.admin hf1_npcs.admin allow
 ```
 
 Or add your license identifier to `Config.AllowedIdentifiers`.
@@ -144,11 +144,11 @@ Or add your license identifier to `Config.AllowedIdentifiers`.
 Check:
 - OneSync is enabled.
 - The ped model is valid.
-- `qbx_npcmanager` starts after `oxmysql`, `ox_lib`, and `qbx_core`.
+- `hf1_npcs` starts after `oxmysql`, `ox_lib`, and `qbx_core`.
 - Server console for a `Failed to create ped` message.
 
 ### Animation does not play
 Scenarios override animations. Set Scenario to None if using a custom animation.
 
 ### ox_target does not show
-Make sure `ox_target` is started before `qbx_npcmanager` and the NPC has target enabled with a non-empty event name.
+Make sure `ox_target` is started before `hf1_npcs` and the NPC has target enabled with a non-empty event name.

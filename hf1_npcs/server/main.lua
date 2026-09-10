@@ -3,7 +3,7 @@ local spawned = {}
 
 local function dbg(...)
     if Config.Debug then
-        print('[qbx_npcmanager]', ...)
+        print('[hf1_npcs]', ...)
     end
 end
 
@@ -81,7 +81,7 @@ local function spawnNpc(npc)
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, npc.coords.z, npc.coords.w, true, true)
 
     if not ped or ped == 0 then
-        print(('[qbx_npcmanager] Failed to create ped #%s (%s)'):format(npc.id, npc.model))
+        print(('[hf1_npcs] Failed to create ped #%s (%s)'):format(npc.id, npc.model))
         return
     end
 
@@ -120,7 +120,7 @@ local function getList()
 end
 
 local function broadcast()
-    TriggerClientEvent('qbx_npcmanager:client:setCache', -1, getList())
+    TriggerClientEvent('hf1_npcs:client:setCache', -1, getList())
 end
 
 MySQL.ready(function()
@@ -129,18 +129,18 @@ MySQL.ready(function()
         spawnNpc(list[i])
         Wait(0)
     end
-    print(('[qbx_npcmanager] Loaded %s persistent NPC(s).'):format(#list))
+    print(('[hf1_npcs] Loaded %s persistent NPC(s).'):format(#list))
 end)
 
-lib.callback.register('qbx_npcmanager:server:hasAccess', function(source)
+lib.callback.register('hf1_npcs:server:hasAccess', function(source)
     return NPCManagerPermissions.HasAccess(source)
 end)
 
-lib.callback.register('qbx_npcmanager:server:getNpcs', function(source)
+lib.callback.register('hf1_npcs:server:getNpcs', function(source)
     return getList()
 end)
 
-lib.callback.register('qbx_npcmanager:server:createNpc', function(source, data)
+lib.callback.register('hf1_npcs:server:createNpc', function(source, data)
     if not NPCManagerPermissions.HasAccess(source) then
         return { ok = false, message = 'You do not have permission.' }
     end
@@ -159,7 +159,7 @@ lib.callback.register('qbx_npcmanager:server:createNpc', function(source, data)
     return { ok = true, id = id }
 end)
 
-lib.callback.register('qbx_npcmanager:server:updateNpc', function(source, data)
+lib.callback.register('hf1_npcs:server:updateNpc', function(source, data)
     if not NPCManagerPermissions.HasAccess(source) then
         return { ok = false, message = 'You do not have permission.' }
     end
@@ -180,7 +180,7 @@ lib.callback.register('qbx_npcmanager:server:updateNpc', function(source, data)
     return { ok = true }
 end)
 
-lib.callback.register('qbx_npcmanager:server:deleteNpc', function(source, id)
+lib.callback.register('hf1_npcs:server:deleteNpc', function(source, id)
     if not NPCManagerPermissions.HasAccess(source) then
         return { ok = false, message = 'You do not have permission.' }
     end
@@ -196,13 +196,13 @@ lib.callback.register('qbx_npcmanager:server:deleteNpc', function(source, id)
     return { ok = true }
 end)
 
-RegisterNetEvent('qbx_npcmanager:server:requestSync', function()
-    TriggerClientEvent('qbx_npcmanager:client:setCache', source, getList())
+RegisterNetEvent('hf1_npcs:server:requestSync', function()
+    TriggerClientEvent('hf1_npcs:client:setCache', source, getList())
 end)
 
 RegisterCommand(Config.Command, function(source)
     if source == 0 then
-        print('[qbx_npcmanager] This command is player-only.')
+        print('[hf1_npcs] This command is player-only.')
         return
     end
 
@@ -211,7 +211,7 @@ RegisterCommand(Config.Command, function(source)
         return
     end
 
-    TriggerClientEvent('qbx_npcmanager:client:open', source)
+    TriggerClientEvent('hf1_npcs:client:open', source)
 end, false)
 
 AddEventHandler('onResourceStop', function(resource)

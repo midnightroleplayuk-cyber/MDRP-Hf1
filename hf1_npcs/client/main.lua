@@ -5,7 +5,7 @@ NPCManager.targets = NPCManager.targets or {}
 
 local function dbg(...)
     if Config.Debug then
-        print('[qbx_npcmanager]', ...)
+        print('[hf1_npcs]', ...)
     end
 end
 
@@ -18,7 +18,7 @@ function NPCManager.Notify(description, ntype)
 end
 
 function NPCManager.HasAccess()
-    return lib.callback.await('qbx_npcmanager:server:hasAccess', false) == true
+    return lib.callback.await('hf1_npcs:server:hasAccess', false) == true
 end
 
 function NPCManager.LoadModel(model)
@@ -42,7 +42,7 @@ end
 local function clearTarget(id, entity)
     if NPCManager.targets[id] and GetResourceState('ox_target') == 'started' and entity and DoesEntityExist(entity) then
         pcall(function()
-            exports.ox_target:removeLocalEntity(entity, ('qbx_npcmanager:%s'):format(id))
+            exports.ox_target:removeLocalEntity(entity, ('hf1_npcs:%s'):format(id))
         end)
     end
     NPCManager.targets[id] = nil
@@ -54,7 +54,7 @@ local function setupTarget(npc, entity)
     if not npc.target or not npc.target.enabled or npc.target.event == '' then return end
     if GetResourceState('ox_target') ~= 'started' then return end
 
-    local optionName = ('qbx_npcmanager:%s'):format(npc.id)
+    local optionName = ('hf1_npcs:%s'):format(npc.id)
     exports.ox_target:addLocalEntity(entity, {
         {
             name = optionName,
@@ -107,7 +107,7 @@ function NPCManager.ApplyToEntity(npc, entity)
     return true
 end
 
-RegisterNetEvent('qbx_npcmanager:client:setCache', function(list)
+RegisterNetEvent('hf1_npcs:client:setCache', function(list)
     NPCManager.cache = {}
     for i = 1, #(list or {}) do
         NPCManager.cache[list[i].id] = list[i]
@@ -115,7 +115,7 @@ RegisterNetEvent('qbx_npcmanager:client:setCache', function(list)
     NPCManager.applied = {}
 end)
 
-RegisterNetEvent('qbx_npcmanager:client:open', function()
+RegisterNetEvent('hf1_npcs:client:open', function()
     if NPCManager.OpenMainMenu then
         NPCManager.OpenMainMenu()
     end
@@ -123,7 +123,7 @@ end)
 
 CreateThread(function()
     Wait(1000)
-    TriggerServerEvent('qbx_npcmanager:server:requestSync')
+    TriggerServerEvent('hf1_npcs:server:requestSync')
 
     while true do
         local playerCoords = GetEntityCoords(cache.ped)
@@ -163,7 +163,7 @@ CreateThread(function()
 end)
 
 lib.addKeybind({
-    name = 'qbx_npcmanager_open',
+    name = 'hf1_npcs_open',
     description = 'Open NPC Manager',
     defaultKey = Config.Keybind,
     onPressed = function()

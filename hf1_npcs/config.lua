@@ -4,8 +4,8 @@ Config.Command = 'createnpc'
 Config.Keybind = 'INSERT'
 
 -- Grant this ACE to your admin principal, for example:
--- add_ace group.admin qbx_npcmanager.admin allow
-Config.AcePermission = 'qbx_npcmanager.admin'
+-- add_ace group.admin hf1_npcs.admin allow
+Config.AcePermission = 'hf1_npcs.admin'
 
 -- Optional identifier whitelist. Either ACE permission OR a matching identifier grants access.
 -- Supports license:, license2:, discord:, fivem:, etc.

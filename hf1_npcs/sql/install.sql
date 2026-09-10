@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `qbx_npcmanager` (
+CREATE TABLE IF NOT EXISTS `hf1_npcs` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   `model` varchar(80) NOT NULL,
@@ -21,6 +21,6 @@ CREATE TABLE IF NOT EXISTS `qbx_npcmanager` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `idx_qbx_npcmanager_name` (`name`),
-  KEY `idx_qbx_npcmanager_model` (`model`)
+  KEY `idx_hf1_npcs_name` (`name`),
+  KEY `idx_hf1_npcs_model` (`model`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

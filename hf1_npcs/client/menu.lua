@@ -270,7 +270,7 @@ local function createNpc()
     local data = buildNpc(nil, true)
     if not data then return end
 
-    local response = lib.callback.await('qbx_npcmanager:server:createNpc', false, data)
+    local response = lib.callback.await('hf1_npcs:server:createNpc', false, data)
     if response and response.ok then
         NPCManager.Notify(('NPC #%s created successfully.'):format(response.id), 'success')
     else
@@ -287,7 +287,7 @@ local function editNpc(npc)
     local data = buildNpc(npc, false)
     if not data then return end
 
-    local response = lib.callback.await('qbx_npcmanager:server:updateNpc', false, data)
+    local response = lib.callback.await('hf1_npcs:server:updateNpc', false, data)
     if response and response.ok then
         NPCManager.Notify(('NPC #%s updated.'):format(npc.id), 'success')
     else
@@ -303,7 +303,7 @@ local function moveNpc(npc)
     for k, v in pairs(npc) do updated[k] = v end
     updated.coords = newCoords
 
-    local response = lib.callback.await('qbx_npcmanager:server:updateNpc', false, updated)
+    local response = lib.callback.await('hf1_npcs:server:updateNpc', false, updated)
     if response and response.ok then
         NPCManager.Notify(('NPC #%s moved.'):format(npc.id), 'success')
     else
@@ -321,7 +321,7 @@ local function duplicateNpc(npc)
     copy.name = ('%s Copy'):format(npc.name)
     copy.coords = newCoords
 
-    local response = lib.callback.await('qbx_npcmanager:server:createNpc', false, copy)
+    local response = lib.callback.await('hf1_npcs:server:createNpc', false, copy)
     if response and response.ok then
         NPCManager.Notify(('NPC duplicated as #%s.'):format(response.id), 'success')
     else
@@ -340,7 +340,7 @@ local function deleteNpc(npc)
 
     if confirm ~= 'confirm' then return end
 
-    local response = lib.callback.await('qbx_npcmanager:server:deleteNpc', false, npc.id)
+    local response = lib.callback.await('hf1_npcs:server:deleteNpc', false, npc.id)
     if response and response.ok then
         NPCManager.Notify(('NPC #%s deleted.'):format(npc.id), 'success')
     else
@@ -350,9 +350,9 @@ end
 
 local function openNpcActions(npc)
     lib.registerContext({
-        id = 'qbx_npcmanager_actions',
+        id = 'hf1_npcs_actions',
         title = ('#%s - %s'):format(npc.id, npc.name),
-        menu = 'qbx_npcmanager_manage',
+        menu = 'hf1_npcs_manage',
         options = {
             {
                 title = 'Teleport To',
@@ -388,11 +388,11 @@ local function openNpcActions(npc)
         }
     })
 
-    lib.showContext('qbx_npcmanager_actions')
+    lib.showContext('hf1_npcs_actions')
 end
 
 local function manageNpcs()
-    local list = lib.callback.await('qbx_npcmanager:server:getNpcs', false) or {}
+    local list = lib.callback.await('hf1_npcs:server:getNpcs', false) or {}
     if #list == 0 then
         NPCManager.Notify('There are no saved NPCs yet.', 'inform')
         return
@@ -430,12 +430,12 @@ local function manageNpcs()
     end
 
     lib.registerContext({
-        id = 'qbx_npcmanager_manage',
+        id = 'hf1_npcs_manage',
         title = ('Manage NPCs (%s)'):format(#options),
-        menu = 'qbx_npcmanager_main',
+        menu = 'hf1_npcs_main',
         options = options
     })
-    lib.showContext('qbx_npcmanager_manage')
+    lib.showContext('hf1_npcs_manage')
 end
 
 function NPCManager.OpenMainMenu()
@@ -445,8 +445,8 @@ function NPCManager.OpenMainMenu()
     end
 
     lib.registerContext({
-        id = 'qbx_npcmanager_main',
-        title = 'Qbox NPC Manager',
+        id = 'hf1_npcs_main',
+        title = 'HF1 NPCs',
         options = {
             {
                 title = 'Create NPC',
@@ -465,12 +465,12 @@ function NPCManager.OpenMainMenu()
                 description = 'Request the latest NPC list from the server.',
                 icon = 'rotate',
                 onSelect = function()
-                    TriggerServerEvent('qbx_npcmanager:server:requestSync')
+                    TriggerServerEvent('hf1_npcs:server:requestSync')
                     NPCManager.Notify('NPC cache refreshed.', 'success')
                 end,
             },
         }
     })
 
-    lib.showContext('qbx_npcmanager_main')
+    lib.showContext('hf1_npcs_main')
 end
