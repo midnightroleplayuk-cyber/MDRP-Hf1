@@ -12,9 +12,6 @@ local function rightVectorFromHeading(heading)
     return vec3(-math.sin(r), math.cos(r), 0.0)
 end
 
--- Cast a ray straight through the centre of the gameplay camera. The mouse still
--- controls the camera during placement, so this behaves like a simple point-and-click
--- world picker without needing NUI cursor focus.
 local function getMouseWorldHit(ignoreEntity)
     local camCoords = GetGameplayCamCoord()
     local direction = rotationToDirection(GetGameplayCamRot(2))
@@ -29,11 +26,25 @@ local function getMouseWorldHit(ignoreEntity)
     )
 
     local _, hit, endCoords = GetShapeTestResult(ray)
-    if hit == 1 then
-        return endCoords
+    if hit == 1 then return endCoords end
+    return nil
+end
+
+-- Raycasts can hit slightly below/inside collision. Resolve a clean ground Z at
+-- the selected X/Y where possible, but fall back to the ray hit for stairs,
+-- interiors and unusual surfaces.
+local function resolveSurfacePoint(hit)
+    if not hit then return nil end
+
+    local probes = { 1.5, 3.0, 8.0, 20.0 }
+    for i = 1, #probes do
+        local found, groundZ = GetGroundZFor_3dCoord(hit.x, hit.y, hit.z + probes[i], false)
+        if found then
+            return vec3(hit.x, hit.y, groundZ)
+        end
     end
 
-    return nil
+    return vec3(hit.x, hit.y, hit.z)
 end
 
 function NPCManager.PlacePed(model, existingCoords)
@@ -44,6 +55,7 @@ function NPCManager.PlacePed(model, existingCoords)
     end
 
     local playerPed = cache.ped
+    local playerCoords = GetEntityCoords(playerPed)
     local start
     local heading
 
@@ -51,23 +63,26 @@ function NPCManager.PlacePed(model, existingCoords)
         start = vec3(existingCoords.x, existingCoords.y, existingCoords.z)
         heading = existingCoords.w or GetEntityHeading(playerPed)
     else
-        local pcoords = GetEntityCoords(playerPed)
-        local forward = rotationToDirection(GetGameplayCamRot(2))
-        start = pcoords + (forward * Config.Placement.distanceInFront)
-        heading = GetEntityHeading(playerPed)
+        -- Start on the player's ground plane rather than camera pitch, so the
+        -- preview always has a sensible initial position.
+        local h = GetEntityHeading(playerPed)
+        local forward = vec3(-math.sin(math.rad(h)), math.cos(math.rad(h)), 0.0)
+        start = playerCoords + (forward * Config.Placement.distanceInFront)
+        local found, groundZ = GetGroundZFor_3dCoord(start.x, start.y, playerCoords.z + 3.0, false)
+        if found then start = vec3(start.x, start.y, groundZ) end
+        heading = h
     end
 
-    -- Keep `coords.z` as the actual ground/saved Z used by the normal NPC spawn code.
-    -- SET_ENTITY_COORDS_NO_OFFSET positions the model by its origin, so use the
-    -- model's lowest bound only for the translucent placement preview. This keeps
-    -- the ped's feet on the raycast surface without saving an artificially raised Z.
-    local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.max(0.0, -(minDim.z or 0.0))
+    local minDim = GetModelDimensions(hash)
+    local feetOffset = 0.0
+    if minDim and minDim.z then
+        feetOffset = math.max(0.0, -minDim.z)
+    end
 
     local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
-        NPCManager.Notify('Could not create placement preview.', 'error')
+        NPCManager.Notify('Could not create the placement preview for this ped model.', 'error')
         return nil
     end
 
@@ -78,45 +93,44 @@ function NPCManager.PlacePed(model, existingCoords)
     SetBlockingOfNonTemporaryEvents(preview, true)
 
     local coords = start
-    local originalPlayerCoords = GetEntityCoords(playerPed)
+    local originalPlayerCoords = playerCoords
     local confirmed = false
     local cancelled = false
+    local hasChosenPosition = existingCoords ~= nil
 
     lib.showTextUI(
-        '[MOUSE] Aim  [LEFT CLICK] Place Ped  [W/S] Forward/Back  [A/D] Left/Right\n' ..
-        '[Q/E] Down/Up  [←/→] Rotate  [SHIFT] Fast  [CTRL] Precision  [ENTER] Save  [BACKSPACE] Cancel',
+        '[MOUSE] Aim  [LEFT CLICK] Set Position  [W/S/A/D] Fine Move\n' ..
+        '[Q/E] Height  [←/→] Rotate  [SHIFT] Fast  [CTRL] Precision  [ENTER] Save  [BACKSPACE] Cancel',
         { position = 'top-center', icon = 'person' }
     )
 
     while DoesEntityExist(preview) and not confirmed and not cancelled do
         Wait(0)
 
-        -- Freeze normal player actions but deliberately leave mouse-look enabled.
-        DisableControlAction(0, 30, true) -- move left/right axis
-        DisableControlAction(0, 31, true) -- move forward/back axis
-        DisableControlAction(0, 32, true) -- W
-        DisableControlAction(0, 33, true) -- S
-        DisableControlAction(0, 34, true) -- A
-        DisableControlAction(0, 35, true) -- D
-        DisableControlAction(0, 44, true) -- Q
-        DisableControlAction(0, 38, true) -- E
-        DisableControlAction(0, 21, true) -- SHIFT
-        DisableControlAction(0, 36, true) -- CTRL
-        DisableControlAction(0, 174, true) -- left arrow
-        DisableControlAction(0, 175, true) -- right arrow
-        DisableControlAction(0, 191, true) -- ENTER
-        DisableControlAction(0, 177, true) -- BACKSPACE
-        DisableControlAction(0, 24, true) -- LEFT CLICK / attack
-        DisableControlAction(0, 25, true) -- aim weapon
+        DisableControlAction(0, 30, true)
+        DisableControlAction(0, 31, true)
+        DisableControlAction(0, 32, true)
+        DisableControlAction(0, 33, true)
+        DisableControlAction(0, 34, true)
+        DisableControlAction(0, 35, true)
+        DisableControlAction(0, 44, true)
+        DisableControlAction(0, 38, true)
+        DisableControlAction(0, 21, true)
+        DisableControlAction(0, 36, true)
+        DisableControlAction(0, 174, true)
+        DisableControlAction(0, 175, true)
+        DisableControlAction(0, 191, true)
+        DisableControlAction(0, 177, true)
+        DisableControlAction(0, 24, true)
+        DisableControlAction(0, 25, true)
         DisablePlayerFiring(PlayerId(), true)
 
-        -- Mouse placement: aim the camera at a surface and left-click to snap the
-        -- preview there. A marker indicates the exact point that will be used.
-        local mouseHit = getMouseWorldHit(playerPed)
+        local rawHit = getMouseWorldHit(playerPed)
+        local mouseHit = resolveSurfacePoint(rawHit)
         if mouseHit then
             DrawMarker(
                 28,
-                mouseHit.x, mouseHit.y, mouseHit.z + 0.03,
+                mouseHit.x, mouseHit.y, mouseHit.z + 0.035,
                 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0,
                 0.18, 0.18, 0.18,
@@ -127,7 +141,8 @@ function NPCManager.PlacePed(model, existingCoords)
             if IsDisabledControlJustPressed(0, 24) then
                 local distanceFromPlayer = #(mouseHit - originalPlayerCoords)
                 if distanceFromPlayer <= Config.Placement.maxDistanceFromPlayer then
-                    coords = vec3(mouseHit.x, mouseHit.y, mouseHit.z)
+                    coords = mouseHit
+                    hasChosenPosition = true
                 else
                     NPCManager.Notify(('Placement is limited to %.0f metres from you.'):format(Config.Placement.maxDistanceFromPlayer), 'error')
                 end
@@ -141,13 +156,15 @@ function NPCManager.PlacePed(model, existingCoords)
         local h = GetEntityHeading(preview)
         local forward = vec3(-math.sin(math.rad(h)), math.cos(math.rad(h)), 0.0)
         local right = rightVectorFromHeading(h)
+        local moved = false
 
-        if IsDisabledControlPressed(0, 32) then coords = coords + forward * speed end -- W
-        if IsDisabledControlPressed(0, 33) then coords = coords - forward * speed end -- S
-        if IsDisabledControlPressed(0, 34) then coords = coords - right * speed end -- A
-        if IsDisabledControlPressed(0, 35) then coords = coords + right * speed end -- D
-        if IsDisabledControlPressed(0, 44) then coords = coords - vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- Q
-        if IsDisabledControlPressed(0, 38) then coords = coords + vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- E
+        if IsDisabledControlPressed(0, 32) then coords = coords + forward * speed; moved = true end
+        if IsDisabledControlPressed(0, 33) then coords = coords - forward * speed; moved = true end
+        if IsDisabledControlPressed(0, 34) then coords = coords - right * speed; moved = true end
+        if IsDisabledControlPressed(0, 35) then coords = coords + right * speed; moved = true end
+        if IsDisabledControlPressed(0, 44) then coords = coords - vec3(0.0, 0.0, Config.Placement.verticalSpeed); moved = true end
+        if IsDisabledControlPressed(0, 38) then coords = coords + vec3(0.0, 0.0, Config.Placement.verticalSpeed); moved = true end
+        if moved then hasChosenPosition = true end
 
         if IsDisabledControlPressed(0, 174) then
             SetEntityHeading(preview, h + Config.Placement.rotateSpeed)
@@ -155,15 +172,22 @@ function NPCManager.PlacePed(model, existingCoords)
             SetEntityHeading(preview, h - Config.Placement.rotateSpeed)
         end
 
-        if #(coords - originalPlayerCoords) > Config.Placement.maxDistanceFromPlayer then
+        local dist = #(coords - originalPlayerCoords)
+        if dist > Config.Placement.maxDistanceFromPlayer and dist > 0.001 then
             local direction = coords - originalPlayerCoords
-            coords = originalPlayerCoords + (direction / #direction) * Config.Placement.maxDistanceFromPlayer
+            coords = originalPlayerCoords + (direction / dist) * Config.Placement.maxDistanceFromPlayer
         end
 
+        -- Offset only the translucent preview by the model's lowest bound. The
+        -- saved coordinate stays as the actual surface/feet position.
         SetEntityCoordsNoOffset(preview, coords.x, coords.y, coords.z + feetOffset, false, false, false)
 
         if IsDisabledControlJustPressed(0, 191) then
-            confirmed = true
+            if hasChosenPosition then
+                confirmed = true
+            else
+                NPCManager.Notify('Left-click a surface to choose where the NPC should stand first.', 'error')
+            end
         elseif IsDisabledControlJustPressed(0, 177) then
             cancelled = true
         end
@@ -173,8 +197,6 @@ function NPCManager.PlacePed(model, existingCoords)
 
     local result
     if confirmed and DoesEntityExist(preview) then
-        -- Save the ground point, not the preview model-origin Z. The server's
-        -- CreatePed call expects these normal world/ground coordinates.
         result = {
             x = coords.x,
             y = coords.y,

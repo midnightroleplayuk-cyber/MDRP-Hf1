@@ -5,65 +5,65 @@ local function boolDefault(value, fallback)
     return value == true
 end
 
-local function scenarioOptions()
+local function activityOptions()
     local options = {}
-    for i = 1, #ScenarioPresets do
+    for i = 1, #ActivityPresets do
         options[#options + 1] = {
-            label = ScenarioPresets[i].label,
-            value = ScenarioPresets[i].value
+            label = ActivityPresets[i].label,
+            value = ActivityPresets[i].value,
         }
     end
     return options
 end
 
-local function animationOptions()
-    local options = {}
-    for i = 1, #AnimationPresets do
-        options[#options + 1] = {
-            label = AnimationPresets[i].label,
-            value = i
-        }
+local function presetForExisting(existing)
+    existing = existing or {}
+
+    if existing.scenario and existing.scenario ~= '' then
+        for i = 1, #ActivityPresets do
+            local preset = ActivityPresets[i]
+            if preset.type == 'scenario' and preset.scenario == existing.scenario then
+                return preset.value
+            end
+        end
+        return 'advanced'
     end
-    return options
+
+    if existing.animDict and existing.animDict ~= '' and existing.animName and existing.animName ~= '' then
+        for i = 1, #ActivityPresets do
+            local preset = ActivityPresets[i]
+            if preset.type == 'anim' and preset.dict == existing.animDict and preset.name == existing.animName then
+                return preset.value
+            end
+        end
+        return 'advanced'
+    end
+
+    return 'none'
+end
+
+local function getActivityPreset(value)
+    for i = 1, #ActivityPresets do
+        if ActivityPresets[i].value == value then
+            return ActivityPresets[i]
+        end
+    end
+    return ActivityPresets[1]
 end
 
 local function getBehavior(existing)
     existing = existing or {}
+
     local input = lib.inputDialog('NPC Behaviour & Settings', {
         {
             type = 'select',
-            label = 'Scenario preset',
-            description = 'Scenarios take priority over custom animations.',
-            options = scenarioOptions(),
-            default = existing.scenario or '',
+            label = 'Activity / Pose',
+            description = 'Pick what the NPC should do. Props and animations are configured automatically.',
+            options = activityOptions(),
+            default = presetForExisting(existing),
             searchable = true,
-        },
-        {
-            type = 'select',
-            label = 'Animation preset',
-            description = 'Choose a preset or leave None and use custom fields below.',
-            options = animationOptions(),
-            default = 1,
-            searchable = true,
-        },
-        {
-            type = 'input',
-            label = 'Custom animation dictionary',
-            default = existing.animDict or '',
-            placeholder = 'e.g. missheistdockssetup1clipboard@base',
-        },
-        {
-            type = 'input',
-            label = 'Custom animation name',
-            default = existing.animName or '',
-            placeholder = 'e.g. base',
-        },
-        {
-            type = 'number',
-            label = 'Animation flag',
-            default = existing.animFlag or Config.Defaults.animFlag,
-            min = 0,
-            max = 51,
+            clearable = false,
+            required = true,
         },
         {
             type = 'checkbox',
@@ -77,7 +77,7 @@ local function getBehavior(existing)
         },
         {
             type = 'checkbox',
-            label = 'Block non-temporary events (stoic)',
+            label = 'Ignore nearby events / stay calm',
             checked = boolDefault(existing.blockEvents, Config.Defaults.blockEvents),
         },
         {
@@ -92,7 +92,8 @@ local function getBehavior(existing)
         },
         {
             type = 'number',
-            label = 'Spawn / apply distance',
+            label = 'Spawn distance',
+            description = 'How close a player should be before this NPC is managed/applied.',
             default = existing.spawnDistance or Config.Defaults.spawnDistance,
             min = 25,
             max = 500,
@@ -100,55 +101,87 @@ local function getBehavior(existing)
         {
             type = 'checkbox',
             label = 'Enable ox_target interaction',
+            description = 'Optional. This is the basic interaction hook; the planned conversation builder can replace/extend this later.',
             checked = existing.target and existing.target.enabled or false,
         },
         {
             type = 'input',
-            label = 'ox_target label',
+            label = 'Interaction label',
+            description = 'Example: Talk to Receptionist',
             default = existing.target and existing.target.label or Config.Defaults.targetLabel,
         },
         {
             type = 'input',
-            label = 'ox_target icon',
+            label = 'Interaction icon',
             default = existing.target and existing.target.icon or Config.Defaults.targetIcon,
         },
         {
             type = 'input',
             label = 'Client event to trigger',
-            description = 'Example: myresource:client:openShop',
+            description = 'Optional advanced hook, e.g. myresource:client:openShop',
             default = existing.target and existing.target.event or '',
         },
     }, { size = 'lg' })
 
     if not input then return nil end
 
-    local animPreset = AnimationPresets[tonumber(input[2]) or 1] or AnimationPresets[1]
-    local animDict = input[3] or ''
-    local animName = input[4] or ''
-    local animFlag = tonumber(input[5]) or Config.Defaults.animFlag
+    local preset = getActivityPreset(input[1])
+    local scenario, animDict, animName, animFlag = '', '', '', Config.Defaults.animFlag
 
-    if animPreset and animPreset.dict ~= '' and animDict == '' and animName == '' then
-        animDict = animPreset.dict
-        animName = animPreset.name
-        animFlag = animPreset.flag
+    if preset.type == 'scenario' then
+        scenario = preset.scenario or ''
+    elseif preset.type == 'anim' then
+        animDict = preset.dict or ''
+        animName = preset.name or ''
+        animFlag = preset.flag or Config.Defaults.animFlag
+    elseif preset.type == 'advanced' then
+        local advanced = lib.inputDialog('Advanced Custom Animation', {
+            {
+                type = 'input',
+                label = 'Animation dictionary',
+                description = 'Only use this if you know the GTA/FiveM animation dictionary.',
+                default = existing.animDict or '',
+                required = true,
+            },
+            {
+                type = 'input',
+                label = 'Animation name',
+                description = 'The clip/name inside that animation dictionary.',
+                default = existing.animName or '',
+                required = true,
+            },
+            {
+                type = 'number',
+                label = 'Animation flag',
+                description = 'Normally 1 for a looping stationary animation, or 49 for some upper-body/prop animations.',
+                default = existing.animFlag or Config.Defaults.animFlag,
+                min = 0,
+                max = 51,
+            },
+        })
+
+        if not advanced then return nil end
+        animDict = advanced[1] or ''
+        animName = advanced[2] or ''
+        animFlag = tonumber(advanced[3]) or Config.Defaults.animFlag
     end
 
     return {
-        scenario = input[1] or '',
+        scenario = scenario,
         animDict = animDict,
         animName = animName,
         animFlag = animFlag,
-        invincible = input[6] == true,
-        frozen = input[7] == true,
-        blockEvents = input[8] == true,
-        canRagdoll = input[9] == true,
-        collision = input[10] == true,
-        spawnDistance = tonumber(input[11]) or Config.Defaults.spawnDistance,
+        invincible = input[2] == true,
+        frozen = input[3] == true,
+        blockEvents = input[4] == true,
+        canRagdoll = input[5] == true,
+        collision = input[6] == true,
+        spawnDistance = tonumber(input[7]) or Config.Defaults.spawnDistance,
         target = {
-            enabled = input[12] == true,
-            label = input[13] or Config.Defaults.targetLabel,
-            icon = input[14] or Config.Defaults.targetIcon,
-            event = input[15] or '',
+            enabled = input[8] == true,
+            label = input[9] or Config.Defaults.targetLabel,
+            icon = input[10] or Config.Defaults.targetIcon,
+            event = input[11] or '',
         }
     }
 end
@@ -201,6 +234,10 @@ local function buildNpc(existing, replacingPosition)
             options = pedModelOptions(existing and existing.model or nil),
             default = existing and existing.model or nil,
             searchable = true,
+            -- Do not open the model list just because the field receives focus.
+            -- Clicking the field opens it; typing still opens and filters matches.
+            openOnFocus = false,
+            placeholder = 'Click to choose or type to search...',
             clearable = false,
             required = true,
         },
