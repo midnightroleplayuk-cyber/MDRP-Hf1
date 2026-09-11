@@ -73,27 +73,42 @@ function NPCManager.PlacePed(model, existingCoords)
         heading = h
     end
 
-    -- GTA stores a ped's entity origin above the soles. Treat our saved/selected Z
-    -- as the surface under the feet, then raise the entity origin by the model's
-    -- lower-bound distance, then apply the small shared visual ground correction.
-    -- Do not subtract HeightAboveGround afterwards: that
-    -- would put the origin back on the floor and bury half the ped.
+    -- Spawn once using model bounds as a safe starting point, then calibrate the
+    -- real origin-to-ground offset from the ped's actual foot bones. Model bounds
+    -- often include invisible geometry below the shoes, which is what caused the
+    -- visible hover even when the maths looked correct.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.max(0.0, -minDim.z) + (Config.Placement.groundOffset or 0.0)
-    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
+    local fallbackOffset = math.max(0.0, -minDim.z)
+    local preview = CreatePed(4, hash, start.x, start.y, start.z + fallbackOffset, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
         NPCManager.Notify('Could not create the placement preview for this ped model.', 'error')
         return nil
     end
 
+    local function calculateFeetOffset(entity)
+        local entityZ = GetEntityCoords(entity).z
+        local leftFoot = GetPedBoneCoords(entity, 14201, 0.0, 0.0, 0.0) -- SKEL_L_Foot
+        local rightFoot = GetPedBoneCoords(entity, 52301, 0.0, 0.0, 0.0) -- SKEL_R_Foot
+
+        if leftFoot and rightFoot then
+            local lowestFootZ = math.min(leftFoot.z, rightFoot.z)
+            local offset = entityZ - lowestFootZ
+            if offset > 0.05 and offset < 3.0 then
+                -- Foot bones sit slightly above the visible sole, so add a tiny
+                -- sole allowance. This is much more consistent than model bounds.
+                return offset + (Config.Placement.soleOffset or 0.025)
+            end
+        end
+
+        return fallbackOffset + (Config.Placement.groundOffset or 0.0)
+    end
+
+    Wait(0)
+    local feetOffset = calculateFeetOffset(preview)
+
     local function placePreviewAtGroundPoint(point)
         RequestCollisionAtCoord(point.x, point.y, point.z)
-
-        -- `point.z` is the surface under the NPC's feet. Ped coordinates use the
-        -- model origin, so offset upward by the distance from origin to the model's
-        -- lowest bound plus the shared ground correction. This gives the same
-        -- result for preview and final spawn.
         SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + feetOffset, false, false, false)
     end
 
@@ -235,7 +250,7 @@ function NPCManager.PlacePed(model, existingCoords)
         result = {
             x = coords.x,
             y = coords.y,
-            z = coords.z,
+            z = coords.z + manualHeightOffset,
             w = GetEntityHeading(preview)
         }
     end

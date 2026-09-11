@@ -39,9 +39,11 @@ Config.Placement = {
     rotateSpeed = 1.25,
     verticalSpeed = 0.025,
     maxDistanceFromPlayer = 30.0,
-    -- Small visual correction because GTA model bounds can extend below the visible soles.
-    -- Negative values sink the ped slightly; this is shared by preview + final spawn.
-    groundOffset = -0.045,
+    -- Fallback correction used only if a ped has no usable foot bones.
+    groundOffset = 0.0,
+    -- Foot bones are a little above the visible bottom of the shoe. This small
+    -- allowance places the actual sole on the selected surface.
+    soleOffset = 0.025,
 }
 
 Config.Sync = {

@@ -127,13 +127,12 @@ local function spawnLocalNpc(npc)
         return nil
     end
 
-    -- Saved Z is the surface under the NPC's feet. Ped entity coordinates use
-    -- the model origin, so raise that origin by the model's lower-bound distance
-    -- and apply the same small visual ground correction used by the preview.
-    -- Do not later subtract GetEntityHeightAboveGround: doing so buries the ped.
+    -- Use model bounds only to get the ped instantiated safely. Once the skeleton
+    -- exists, calculate the real origin-to-foot distance from its foot bones so
+    -- invisible model bounds cannot leave the NPC visibly hovering.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.max(0.0, -minDim.z) + (Config.Placement.groundOffset or 0.0)
-    local spawnZ = npc.coords.z + feetOffset
+    local fallbackOffset = math.max(0.0, -minDim.z)
+    local spawnZ = npc.coords.z + fallbackOffset
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         SetModelAsNoLongerNeeded(hash)
@@ -142,11 +141,25 @@ local function spawnLocalNpc(npc)
     end
 
     SetEntityAsMissionEntity(ped, true, true)
-    SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
     SetEntityHeading(ped, npc.coords.w or 0.0)
+    Wait(0)
 
+    local entityZ = GetEntityCoords(ped).z
+    local leftFoot = GetPedBoneCoords(ped, 14201, 0.0, 0.0, 0.0) -- SKEL_L_Foot
+    local rightFoot = GetPedBoneCoords(ped, 52301, 0.0, 0.0, 0.0) -- SKEL_R_Foot
+    local feetOffset = fallbackOffset + (Config.Placement.groundOffset or 0.0)
+
+    if leftFoot and rightFoot then
+        local lowestFootZ = math.min(leftFoot.z, rightFoot.z)
+        local boneOffset = entityZ - lowestFootZ
+        if boneOffset > 0.05 and boneOffset < 3.0 then
+            feetOffset = boneOffset + (Config.Placement.soleOffset or 0.025)
+        end
+    end
+
+    spawnZ = npc.coords.z + feetOffset
     RequestCollisionAtCoord(npc.coords.x, npc.coords.y, npc.coords.z)
-
+    SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
     SetEntityHeading(ped, npc.coords.w or 0.0)
     SetModelAsNoLongerNeeded(hash)
 
