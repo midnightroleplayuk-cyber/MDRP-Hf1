@@ -153,53 +153,34 @@ local function getBehavior(existing)
     }
 end
 
-local function chooseModel()
-    local input = lib.inputDialog('Choose NPC Model', {
-        {
-            type = 'input',
-            label = 'Search or enter model',
-            description = 'Enter any valid FiveM/GTA ped model, or type part of a name/model to browse matches.',
-            placeholder = 's_m_y_cop_01 or cop',
-            required = true,
-        }
-    })
+local function pedModelOptions(existingModel)
+    local options = {}
+    local hasExisting = not existingModel
 
-    if not input then return nil end
-    local query = tostring(input[1] or ''):lower()
-    if query == '' then return nil end
-
-    local exactHash = joaat(query)
-    if IsModelInCdimage(exactHash) and IsModelValid(exactHash) and IsModelAPed(exactHash) then
-        return query
-    end
-
-    local matches = {}
     for i = 1, #PedCatalog do
         local ped = PedCatalog[i]
-        if ped.label:lower():find(query, 1, true) or ped.model:lower():find(query, 1, true) then
-            matches[#matches + 1] = {
-                label = ('%s (%s)'):format(ped.label, ped.model),
-                value = ped.model
-            }
+        options[#options + 1] = {
+            label = ('%s — %s'):format(ped.model, ped.label),
+            value = ped.model,
+        }
+
+        if existingModel and ped.model == existingModel then
+            hasExisting = true
         end
     end
 
-    if #matches == 0 then
-        NPCManager.Notify('No catalog matches, and that exact model is invalid.', 'error')
-        return nil
+    if existingModel and not hasExisting then
+        options[#options + 1] = {
+            label = ('%s — Current saved model'):format(existingModel),
+            value = existingModel,
+        }
     end
 
-    local selection = lib.inputDialog(('Ped results for "%s"'):format(query), {
-        {
-            type = 'select',
-            label = 'Ped model',
-            options = matches,
-            searchable = true,
-            required = true,
-        }
-    })
+    table.sort(options, function(a, b)
+        return a.label:lower() < b.label:lower()
+    end)
 
-    return selection and selection[1] or nil
+    return options
 end
 
 local function buildNpc(existing, replacingPosition)
@@ -214,11 +195,14 @@ local function buildNpc(existing, replacingPosition)
             max = 100,
         },
         {
-            type = 'input',
+            type = 'select',
             label = 'Ped model',
-            description = 'Any valid GTA/FiveM ped model. Leave this unchanged when editing.',
-            default = existing and existing.model or '',
-            required = existing ~= nil,
+            description = 'Choose a Cfx.re/FiveM ped model. Start typing a model name to instantly filter the list.',
+            options = pedModelOptions(existing and existing.model or nil),
+            default = existing and existing.model or nil,
+            searchable = true,
+            clearable = false,
+            required = true,
         },
     })
 
@@ -228,14 +212,14 @@ local function buildNpc(existing, replacingPosition)
     local model = initial[2]
 
     if not model or model == '' then
-        model = chooseModel()
-        if not model then return nil end
-    else
-        local hash = joaat(model)
-        if not IsModelInCdimage(hash) or not IsModelValid(hash) or not IsModelAPed(hash) then
-            NPCManager.Notify('That ped model is invalid.', 'error')
-            return nil
-        end
+        NPCManager.Notify('Please select a ped model.', 'error')
+        return nil
+    end
+
+    local hash = joaat(model)
+    if not IsModelInCdimage(hash) or not IsModelValid(hash) or not IsModelAPed(hash) then
+        NPCManager.Notify('That ped model is invalid.', 'error')
+        return nil
     end
 
     local coords = existing and existing.coords or nil
