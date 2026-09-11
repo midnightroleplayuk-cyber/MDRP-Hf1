@@ -11,6 +11,7 @@ Config.AcePermission = 'hf1_npcs.admin'
 -- Supports license:, license2:, discord:, fivem:, etc.
 Config.AllowedIdentifiers = {
     -- ['license:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] = true,
+       ['fivem:1059188'] = true, --HARDY
 }
 
 Config.Defaults = {
