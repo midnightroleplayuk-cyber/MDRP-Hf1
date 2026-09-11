@@ -85,9 +85,11 @@ local function spawnNpc(npc)
         return
     end
 
+    -- Keep the server responsible for owning/persisting the networked ped.
+    -- Client-only ped properties (invincibility, frozen state, behaviour,
+    -- animations, collision, targeting, etc.) are applied in client/main.lua
+    -- once the entity/state bag is available on each client.
     SetEntityOrphanMode(ped, 2)
-    FreezeEntityPosition(ped, npc.frozen)
-    SetEntityInvincible(ped, npc.invincible)
 
     Entity(ped).state:set('qbxNpcId', npc.id, true)
     Entity(ped).state:set('qbxNpcManaged', true, true)
