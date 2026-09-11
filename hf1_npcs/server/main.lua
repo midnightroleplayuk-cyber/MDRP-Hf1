@@ -1,11 +1,4 @@
 local npcCache = {}
-local spawned = {}
-
-local function dbg(...)
-    if Config.Debug then
-        print('[hf1_npcs]', ...)
-    end
-end
 
 local function notify(source, description, ntype)
     TriggerClientEvent('ox_lib:notify', source, {
@@ -66,43 +59,6 @@ local function sanitizeNpc(data, requireId)
     return cleaned
 end
 
-local function deleteSpawned(id)
-    local entity = spawned[id]
-    if entity and DoesEntityExist(entity) then
-        DeleteEntity(entity)
-    end
-    spawned[id] = nil
-end
-
-local function spawnNpc(npc)
-    deleteSpawned(npc.id)
-
-    local hash = joaat(npc.model)
-    local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, npc.coords.z, npc.coords.w, true, true)
-
-    if not ped or ped == 0 then
-        print(('[hf1_npcs] Failed to create ped #%s (%s)'):format(npc.id, npc.model))
-        return
-    end
-
-    -- Keep the server responsible for owning/persisting the networked ped.
-    -- Client-only ped properties (invincibility, frozen state, behaviour,
-    -- animations, collision, targeting, etc.) are applied in client/main.lua
-    -- once the entity/state bag is available on each client.
-    SetEntityOrphanMode(ped, 2)
-
-    Entity(ped).state:set('qbxNpcId', npc.id, true)
-    Entity(ped).state:set('qbxNpcManaged', true, true)
-
-    spawned[npc.id] = ped
-    dbg(('spawned #%s entity %s'):format(npc.id, ped))
-end
-
-local function rebuildNpc(id)
-    local npc = npcCache[id]
-    if npc then spawnNpc(npc) end
-end
-
 local function loadCache()
     npcCache = {}
     local list = NPCManagerDB.LoadAll()
@@ -127,11 +83,7 @@ end
 
 MySQL.ready(function()
     local list = loadCache()
-    for i = 1, #list do
-        spawnNpc(list[i])
-        Wait(0)
-    end
-    print(('[hf1_npcs] Loaded %s persistent NPC(s).'):format(#list))
+    print(('[hf1_npcs] Loaded %s persistent NPC definition(s). Clients will stream them locally.'):format(#list))
 end)
 
 lib.callback.register('hf1_npcs:server:hasAccess', function(source)
@@ -155,7 +107,6 @@ lib.callback.register('hf1_npcs:server:createNpc', function(source, data)
 
     cleaned.id = id
     npcCache[id] = cleaned
-    spawnNpc(cleaned)
     broadcast()
 
     return { ok = true, id = id }
@@ -176,7 +127,6 @@ lib.callback.register('hf1_npcs:server:updateNpc', function(source, data)
     end
 
     npcCache[cleaned.id] = cleaned
-    rebuildNpc(cleaned.id)
     broadcast()
 
     return { ok = true }
@@ -191,7 +141,6 @@ lib.callback.register('hf1_npcs:server:deleteNpc', function(source, id)
     if not id or not npcCache[id] then return { ok = false, message = 'NPC not found.' } end
 
     NPCManagerDB.Delete(id)
-    deleteSpawned(id)
     npcCache[id] = nil
     broadcast()
 
@@ -215,10 +164,3 @@ RegisterCommand(Config.Command, function(source)
 
     TriggerClientEvent('hf1_npcs:client:open', source)
 end, false)
-
-AddEventHandler('onResourceStop', function(resource)
-    if resource ~= GetCurrentResourceName() then return end
-    for id in pairs(spawned) do
-        deleteSpawned(id)
-    end
-end)
