@@ -367,7 +367,7 @@ end
 local function getBehavior(existing, npcName)
     existing = existing or {}
 
-    local input = lib.inputDialog('NPC Behaviour & Settings', {
+    local behaviourInput = lib.inputDialog('NPC Behaviour & Settings', {
         {
             type = 'select',
             label = 'Activity / Pose',
@@ -391,6 +391,11 @@ local function getBehavior(existing, npcName)
             min = 25,
             max = 500,
         },
+    }, { size = 'md' })
+
+    if not behaviourInput then return nil end
+
+    local interactionInput = lib.inputDialog('NPC Interaction', {
         {
             type = 'select',
             label = 'Player Interaction',
@@ -414,18 +419,18 @@ local function getBehavior(existing, npcName)
         {
             type = 'select',
             label = 'Interaction icon',
-            description = 'Pick an icon by name. The symbol is shown beside each option so you do not need to know Font Awesome names.',
+            description = 'Pick an icon from the list. The symbol is shown beside each option.',
             options = interactionIconOptions(existing.target and existing.target.icon or Config.Defaults.targetIcon),
             default = existing.target and existing.target.icon or Config.Defaults.targetIcon,
             searchable = true,
             clearable = false,
             required = true,
         },
-    }, { size = 'lg' })
+    }, { size = 'md' })
 
-    if not input then return nil end
+    if not interactionInput then return nil end
 
-    local preset = getActivityPreset(input[1])
+    local preset = getActivityPreset(behaviourInput[1])
     local scenario, animDict, animName, animFlag = '', '', '', Config.Defaults.animFlag
 
     if preset.type == 'scenario' then
@@ -438,37 +443,50 @@ local function getBehavior(existing, npcName)
         local advanced = lib.inputDialog('Advanced Custom Animation', {
             { type = 'input', label = 'Animation dictionary', description = 'Only use this if you know the GTA/FiveM animation dictionary.', default = existing.animDict or '', required = true },
             { type = 'input', label = 'Animation name', description = 'The clip/name inside that animation dictionary.', default = existing.animName or '', required = true },
-            { type = 'number', label = 'Animation flag', description = 'Normally 1 for looping stationary animations, or 49 for some upper-body/prop animations.', default = existing.animFlag or Config.Defaults.animFlag, min = 0, max = 51 },
-        })
+            { type = 'number', label = 'Animation flag', default = existing.animFlag or Config.Defaults.animFlag, min = 0, max = 255, required = true },
+        }, { size = 'md' })
         if not advanced then return nil end
         animDict = advanced[1] or ''
         animName = advanced[2] or ''
         animFlag = tonumber(advanced[3]) or Config.Defaults.animFlag
     end
 
-    local mode = input[8] or 'none'
-    local targetEvent = ''
-    local dialogue = { enabled = false, text = '', replies = {} }
+    local interactionMode = interactionInput[1] or 'none'
+    local target = {
+        enabled = interactionMode ~= 'none',
+        mode = interactionMode,
+        label = interactionInput[2] or Config.Defaults.targetLabel,
+        icon = interactionInput[3] or Config.Defaults.targetIcon,
+        event = existing.target and existing.target.event or '',
+    }
 
-    if mode == 'talk' then
+    local dialogue = existing.dialogue or { enabled = false, text = '', replies = {}, steps = {} }
+
+    if interactionMode == 'talk' then
         local dialogueExisting = {}
         for k, v in pairs(existing) do dialogueExisting[k] = v end
         dialogueExisting.name = npcName or existing.name
         dialogue = buildDialogue(dialogueExisting)
         if not dialogue then return nil end
-    elseif mode == 'event' then
-        local direct = lib.inputDialog('Direct Client Event', {
+        target.event = ''
+    elseif interactionMode == 'event' then
+        dialogue = { enabled = false, text = '', replies = {}, steps = {} }
+
+        local eventInput = lib.inputDialog('Direct Client Event', {
             {
                 type = 'input',
-                label = 'Client event to trigger',
-                description = 'Example: myresource:client:openShop',
+                label = 'Client event name',
+                description = 'Advanced: event triggered when the player uses the NPC interaction.',
                 default = existing.target and existing.target.event or '',
+                placeholder = 'resource:client:event',
                 required = true,
-                max = 120,
-            },
-        })
-        if not direct then return nil end
-        targetEvent = direct[1] or ''
+            }
+        }, { size = 'sm' })
+        if not eventInput then return nil end
+        target.event = eventInput[1] or ''
+    else
+        dialogue = { enabled = false, text = '', replies = {}, steps = {} }
+        target.event = ''
     end
 
     return {
@@ -476,19 +494,13 @@ local function getBehavior(existing, npcName)
         animDict = animDict,
         animName = animName,
         animFlag = animFlag,
-        invincible = input[2] == true,
-        frozen = input[3] == true,
-        blockEvents = input[4] == true,
-        canRagdoll = input[5] == true,
-        collision = input[6] == true,
-        spawnDistance = tonumber(input[7]) or Config.Defaults.spawnDistance,
-        target = {
-            enabled = mode ~= 'none',
-            mode = mode,
-            label = input[9] ~= '' and input[9] or (mode == 'talk' and 'Talk' or Config.Defaults.targetLabel),
-            icon = input[10] ~= '' and input[10] or Config.Defaults.targetIcon,
-            event = targetEvent,
-        },
+        invincible = behaviourInput[2],
+        frozen = behaviourInput[3],
+        blockEvents = behaviourInput[4],
+        canRagdoll = behaviourInput[5],
+        collision = behaviourInput[6],
+        spawnDistance = tonumber(behaviourInput[7]) or Config.Defaults.spawnDistance,
+        target = target,
         dialogue = dialogue,
     }
 end
