@@ -5,6 +5,49 @@ local function boolDefault(value, fallback)
     return value == true
 end
 
+
+local InteractionIcons = {
+    { label = 'Talk / Conversation', value = 'fa-solid fa-comments', icon = 'fa-solid fa-comments' },
+    { label = 'Person / General interaction', value = 'fa-solid fa-user', icon = 'fa-solid fa-user' },
+    { label = 'Information / Help', value = 'fa-solid fa-circle-info', icon = 'fa-solid fa-circle-info' },
+    { label = 'Shop / Store', value = 'fa-solid fa-store', icon = 'fa-solid fa-store' },
+    { label = 'Shopping basket', value = 'fa-solid fa-basket-shopping', icon = 'fa-solid fa-basket-shopping' },
+    { label = 'Money / Payment', value = 'fa-solid fa-money-bill', icon = 'fa-solid fa-money-bill' },
+    { label = 'Briefcase / Job', value = 'fa-solid fa-briefcase', icon = 'fa-solid fa-briefcase' },
+    { label = 'Police / Security', value = 'fa-solid fa-shield-halved', icon = 'fa-solid fa-shield-halved' },
+    { label = 'Medical', value = 'fa-solid fa-kit-medical', icon = 'fa-solid fa-kit-medical' },
+    { label = 'Garage / Vehicle', value = 'fa-solid fa-car', icon = 'fa-solid fa-car' },
+    { label = 'Mechanic / Repair', value = 'fa-solid fa-screwdriver-wrench', icon = 'fa-solid fa-screwdriver-wrench' },
+    { label = 'Key / Access', value = 'fa-solid fa-key', icon = 'fa-solid fa-key' },
+    { label = 'House / Property', value = 'fa-solid fa-house', icon = 'fa-solid fa-house' },
+    { label = 'Food', value = 'fa-solid fa-utensils', icon = 'fa-solid fa-utensils' },
+    { label = 'Drink / Bar', value = 'fa-solid fa-martini-glass', icon = 'fa-solid fa-martini-glass' },
+    { label = 'Phone', value = 'fa-solid fa-phone', icon = 'fa-solid fa-phone' },
+    { label = 'Clipboard / Tasks', value = 'fa-solid fa-clipboard', icon = 'fa-solid fa-clipboard' },
+    { label = 'Package / Delivery', value = 'fa-solid fa-box', icon = 'fa-solid fa-box' },
+    { label = 'Map / Travel', value = 'fa-solid fa-map-location-dot', icon = 'fa-solid fa-map-location-dot' },
+    { label = 'Question / Ask', value = 'fa-solid fa-circle-question', icon = 'fa-solid fa-circle-question' },
+}
+
+local function interactionIconOptions(existingIcon)
+    local options, found = {}, false
+    for i = 1, #InteractionIcons do
+        local option = InteractionIcons[i]
+        options[#options + 1] = option
+        if option.value == existingIcon then found = true end
+    end
+
+    if existingIcon and existingIcon ~= '' and not found then
+        table.insert(options, 1, {
+            label = ('Current/custom icon — %s'):format(existingIcon),
+            value = existingIcon,
+            icon = existingIcon,
+        })
+    end
+
+    return options
+end
+
 local function activityOptions()
     local options = {}
     for i = 1, #ActivityPresets do
@@ -194,11 +237,14 @@ local function getBehavior(existing, npcName)
             max = 80,
         },
         {
-            type = 'input',
+            type = 'select',
             label = 'Interaction icon',
-            description = 'Font Awesome icon class used by ox_target.',
+            description = 'Pick an icon by name. The symbol is shown beside each option so you do not need to know Font Awesome names.',
+            options = interactionIconOptions(existing.target and existing.target.icon or Config.Defaults.targetIcon),
             default = existing.target and existing.target.icon or Config.Defaults.targetIcon,
-            max = 80,
+            searchable = true,
+            clearable = false,
+            required = true,
         },
     }, { size = 'lg' })
 
