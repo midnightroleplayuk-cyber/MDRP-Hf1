@@ -73,9 +73,11 @@ function NPCManager.PlacePed(model, existingCoords)
         heading = h
     end
 
-    -- Use the same collision-based grounding as the real streamed NPC.
-    -- Bounding-box offsets vary between ped models and caused the preview to hover.
-    local preview = CreatePed(4, hash, start.x, start.y, start.z + 1.0, heading, false, false)
+    -- Spawn the preview from the model's feet position, then remove any small
+    -- remaining hover using GetEntityHeightAboveGround once collision is ready.
+    local minDim, _ = GetModelDimensions(hash)
+    local feetOffset = math.abs(minDim.z)
+    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset + 0.10, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
         NPCManager.Notify('Could not create the placement preview for this ped model.', 'error')
@@ -83,12 +85,23 @@ function NPCManager.PlacePed(model, existingCoords)
     end
 
     local function placePreviewAtGroundPoint(point)
-        -- Temporarily allow collision so GTA can resolve the ped against the
-        -- actual floor, exactly like spawnLocalNpc does for the final NPC.
         SetEntityCollision(preview, true, true)
-        SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + 1.0, false, false, false)
         RequestCollisionAtCoord(point.x, point.y, point.z)
-        PlaceEntityOnGroundProperly(preview)
+
+        -- Put the model origin high enough that its lowest bound is just above
+        -- the selected surface. This is supported in client Lua for all peds.
+        SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + feetOffset + 0.10, false, false, false)
+
+        -- Once collision is available, remove the actual measured gap. This
+        -- corrects models whose bounding box extends a little below the soles.
+        if HasCollisionLoadedAroundEntity(preview) then
+            local height = GetEntityHeightAboveGround(preview)
+            if height and height > 0.001 and height < 2.0 then
+                local pos = GetEntityCoords(preview)
+                SetEntityCoordsNoOffset(preview, pos.x, pos.y, pos.z - height, false, false, false)
+            end
+        end
+
         SetEntityCollision(preview, false, false)
     end
 

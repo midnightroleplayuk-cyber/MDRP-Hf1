@@ -127,10 +127,11 @@ local function spawnLocalNpc(npc)
         return nil
     end
 
-    -- Spawn slightly above the saved surface, then let GTA place the entity on
-    -- the actual collision below it. Model bounds are not a reliable measure of
-    -- where a ped's soles touch the floor and can leave some models hovering.
-    local spawnZ = npc.coords.z + 1.0
+    -- Treat the saved Z as the floor point. Start from the model's lower bound,
+    -- then remove any remaining measured gap after collision has loaded.
+    local minDim, _ = GetModelDimensions(hash)
+    local feetOffset = math.abs(minDim.z)
+    local spawnZ = npc.coords.z + feetOffset + 0.10
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         SetModelAsNoLongerNeeded(hash)
@@ -142,14 +143,23 @@ local function spawnLocalNpc(npc)
     SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
     SetEntityHeading(ped, npc.coords.w or 0.0)
 
-    -- Give collision a moment to resolve, then snap the ped onto the floor.
+    -- Give collision a moment to resolve, then remove the measured gap between
+    -- the ped and the floor. This avoids the unavailable PlaceEntityOnGroundProperly
+    -- helper and keeps preview/final placement on the same maths.
     RequestCollisionAtCoord(npc.coords.x, npc.coords.y, npc.coords.z)
     local timeout = GetGameTimer() + 1000
     while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < timeout do
         Wait(0)
     end
 
-    PlaceEntityOnGroundProperly(ped)
+    if HasCollisionLoadedAroundEntity(ped) then
+        local height = GetEntityHeightAboveGround(ped)
+        if height and height > 0.001 and height < 2.0 then
+            local pos = GetEntityCoords(ped)
+            SetEntityCoordsNoOffset(ped, pos.x, pos.y, pos.z - height, false, false, false)
+        end
+    end
+
     SetEntityHeading(ped, npc.coords.w or 0.0)
     SetModelAsNoLongerNeeded(hash)
 
