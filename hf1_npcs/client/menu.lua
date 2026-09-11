@@ -51,7 +51,102 @@ local function getActivityPreset(value)
     return ActivityPresets[1]
 end
 
-local function getBehavior(existing)
+local function interactionModeForExisting(existing)
+    existing = existing or {}
+    local target = existing.target or {}
+    if not target.enabled then return 'none' end
+    if target.mode == 'talk' or (existing.dialogue and existing.dialogue.enabled) then return 'talk' end
+    return 'event'
+end
+
+local function buildDialogue(existing)
+    existing = existing or {}
+    local dialogue = existing.dialogue or {}
+    local replies = dialogue.replies or {}
+
+    local basic = lib.inputDialog('Talk to NPC', {
+        {
+            type = 'textarea',
+            label = 'NPC opening line',
+            description = 'What the NPC says when a player chooses the Talk interaction.',
+            default = dialogue.text or ('Hello, I am %s. How can I help?'):format(existing.name or 'there'),
+            required = true,
+            min = 1,
+            max = 500,
+            autosize = true,
+        },
+        {
+            type = 'number',
+            label = 'Number of player replies',
+            description = 'You can add up to four reply buttons for this conversation.',
+            default = math.max(1, math.min(4, #replies > 0 and #replies or 1)),
+            min = 1,
+            max = 4,
+            required = true,
+        },
+    }, { size = 'md' })
+
+    if not basic then return nil end
+
+    local result = {
+        enabled = true,
+        text = basic[1] or '',
+        replies = {},
+    }
+
+    local count = math.floor(tonumber(basic[2]) or 1)
+    for i = 1, count do
+        local old = replies[i] or {}
+        local reply = lib.inputDialog(('Player Reply %s of %s'):format(i, count), {
+            {
+                type = 'input',
+                label = 'Reply button text',
+                description = 'What the player sees as their response option.',
+                default = old.label or '',
+                placeholder = 'Example: Can you show me the shop?',
+                required = true,
+                min = 1,
+                max = 120,
+            },
+            {
+                type = 'textarea',
+                label = 'NPC response',
+                description = 'Optional. What the NPC says after this reply is chosen.',
+                default = old.response or '',
+                placeholder = 'Example: Of course, take a look at what we have.',
+                max = 500,
+                autosize = true,
+            },
+            {
+                type = 'input',
+                label = 'Client event after this reply',
+                description = 'Optional advanced hook, e.g. myresource:client:openShop',
+                default = old.event or '',
+                placeholder = 'Leave blank if this reply only shows dialogue.',
+                max = 120,
+            },
+            {
+                type = 'checkbox',
+                label = 'Close conversation after response',
+                description = 'Recommended for replies that open a shop/menu or finish the conversation.',
+                checked = old.close ~= false,
+            },
+        }, { size = 'md' })
+
+        if not reply then return nil end
+
+        result.replies[#result.replies + 1] = {
+            label = reply[1] or '',
+            response = reply[2] or '',
+            event = reply[3] or '',
+            close = reply[4] == true,
+        }
+    end
+
+    return result
+end
+
+local function getBehavior(existing, npcName)
     existing = existing or {}
 
     local input = lib.inputDialog('NPC Behaviour & Settings', {
@@ -65,61 +160,45 @@ local function getBehavior(existing)
             clearable = false,
             required = true,
         },
-        {
-            type = 'checkbox',
-            label = 'Invincible',
-            checked = boolDefault(existing.invincible, Config.Defaults.invincible),
-        },
-        {
-            type = 'checkbox',
-            label = 'Frozen in place',
-            checked = boolDefault(existing.frozen, Config.Defaults.frozen),
-        },
-        {
-            type = 'checkbox',
-            label = 'Ignore nearby events / stay calm',
-            checked = boolDefault(existing.blockEvents, Config.Defaults.blockEvents),
-        },
-        {
-            type = 'checkbox',
-            label = 'Can ragdoll',
-            checked = boolDefault(existing.canRagdoll, Config.Defaults.canRagdoll),
-        },
-        {
-            type = 'checkbox',
-            label = 'Collision enabled',
-            checked = boolDefault(existing.collision, Config.Defaults.collision),
-        },
+        { type = 'checkbox', label = 'Invincible', checked = boolDefault(existing.invincible, Config.Defaults.invincible) },
+        { type = 'checkbox', label = 'Frozen in place', checked = boolDefault(existing.frozen, Config.Defaults.frozen) },
+        { type = 'checkbox', label = 'Ignore nearby events / stay calm', checked = boolDefault(existing.blockEvents, Config.Defaults.blockEvents) },
+        { type = 'checkbox', label = 'Can ragdoll', checked = boolDefault(existing.canRagdoll, Config.Defaults.canRagdoll) },
+        { type = 'checkbox', label = 'Collision enabled', checked = boolDefault(existing.collision, Config.Defaults.collision) },
         {
             type = 'number',
             label = 'Spawn distance',
-            description = 'How close a player should be before this NPC is managed/applied.',
+            description = 'How close a player should be before this NPC is streamed in.',
             default = existing.spawnDistance or Config.Defaults.spawnDistance,
             min = 25,
             max = 500,
         },
         {
-            type = 'checkbox',
-            label = 'Enable ox_target interaction',
-            description = 'Optional. This is the basic interaction hook; the planned conversation builder can replace/extend this later.',
-            checked = existing.target and existing.target.enabled or false,
+            type = 'select',
+            label = 'Player Interaction',
+            description = 'None, a built-in Talk to NPC conversation, or an advanced direct client event.',
+            options = {
+                { label = 'None', value = 'none' },
+                { label = 'Talk to NPC', value = 'talk' },
+                { label = 'Direct Client Event (Advanced)', value = 'event' },
+            },
+            default = interactionModeForExisting(existing),
+            clearable = false,
+            required = true,
         },
         {
             type = 'input',
             label = 'Interaction label',
             description = 'Example: Talk to Receptionist',
             default = existing.target and existing.target.label or Config.Defaults.targetLabel,
+            max = 80,
         },
         {
             type = 'input',
             label = 'Interaction icon',
+            description = 'Font Awesome icon class used by ox_target.',
             default = existing.target and existing.target.icon or Config.Defaults.targetIcon,
-        },
-        {
-            type = 'input',
-            label = 'Client event to trigger',
-            description = 'Optional advanced hook, e.g. myresource:client:openShop',
-            default = existing.target and existing.target.event or '',
+            max = 80,
         },
     }, { size = 'lg' })
 
@@ -136,34 +215,39 @@ local function getBehavior(existing)
         animFlag = preset.flag or Config.Defaults.animFlag
     elseif preset.type == 'advanced' then
         local advanced = lib.inputDialog('Advanced Custom Animation', {
-            {
-                type = 'input',
-                label = 'Animation dictionary',
-                description = 'Only use this if you know the GTA/FiveM animation dictionary.',
-                default = existing.animDict or '',
-                required = true,
-            },
-            {
-                type = 'input',
-                label = 'Animation name',
-                description = 'The clip/name inside that animation dictionary.',
-                default = existing.animName or '',
-                required = true,
-            },
-            {
-                type = 'number',
-                label = 'Animation flag',
-                description = 'Normally 1 for a looping stationary animation, or 49 for some upper-body/prop animations.',
-                default = existing.animFlag or Config.Defaults.animFlag,
-                min = 0,
-                max = 51,
-            },
+            { type = 'input', label = 'Animation dictionary', description = 'Only use this if you know the GTA/FiveM animation dictionary.', default = existing.animDict or '', required = true },
+            { type = 'input', label = 'Animation name', description = 'The clip/name inside that animation dictionary.', default = existing.animName or '', required = true },
+            { type = 'number', label = 'Animation flag', description = 'Normally 1 for looping stationary animations, or 49 for some upper-body/prop animations.', default = existing.animFlag or Config.Defaults.animFlag, min = 0, max = 51 },
         })
-
         if not advanced then return nil end
         animDict = advanced[1] or ''
         animName = advanced[2] or ''
         animFlag = tonumber(advanced[3]) or Config.Defaults.animFlag
+    end
+
+    local mode = input[8] or 'none'
+    local targetEvent = ''
+    local dialogue = { enabled = false, text = '', replies = {} }
+
+    if mode == 'talk' then
+        local dialogueExisting = {}
+        for k, v in pairs(existing) do dialogueExisting[k] = v end
+        dialogueExisting.name = npcName or existing.name
+        dialogue = buildDialogue(dialogueExisting)
+        if not dialogue then return nil end
+    elseif mode == 'event' then
+        local direct = lib.inputDialog('Direct Client Event', {
+            {
+                type = 'input',
+                label = 'Client event to trigger',
+                description = 'Example: myresource:client:openShop',
+                default = existing.target and existing.target.event or '',
+                required = true,
+                max = 120,
+            },
+        })
+        if not direct then return nil end
+        targetEvent = direct[1] or ''
     end
 
     return {
@@ -178,11 +262,13 @@ local function getBehavior(existing)
         collision = input[6] == true,
         spawnDistance = tonumber(input[7]) or Config.Defaults.spawnDistance,
         target = {
-            enabled = input[8] == true,
-            label = input[9] or Config.Defaults.targetLabel,
-            icon = input[10] or Config.Defaults.targetIcon,
-            event = input[11] or '',
-        }
+            enabled = mode ~= 'none',
+            mode = mode,
+            label = input[9] ~= '' and input[9] or (mode == 'talk' and 'Talk' or Config.Defaults.targetLabel),
+            icon = input[10] ~= '' and input[10] or Config.Defaults.targetIcon,
+            event = targetEvent,
+        },
+        dialogue = dialogue,
     }
 end
 
@@ -267,7 +353,7 @@ local function buildNpc(existing, replacingPosition)
         if not coords then return nil end
     end
 
-    local behavior = getBehavior(existing)
+    local behavior = getBehavior(existing, name)
     if not behavior then return nil end
 
     return {
@@ -286,6 +372,7 @@ local function buildNpc(existing, replacingPosition)
         collision = behavior.collision,
         spawnDistance = behavior.spawnDistance,
         target = behavior.target,
+        dialogue = behavior.dialogue,
     }
 end
 

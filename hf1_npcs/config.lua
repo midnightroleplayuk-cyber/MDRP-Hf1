@@ -29,6 +29,7 @@ Config.Defaults = {
     targetLabel = 'Interact',
     targetIcon = 'fa-solid fa-user',
     targetEvent = '',
+    targetMode = 'event',
 }
 
 Config.Placement = {

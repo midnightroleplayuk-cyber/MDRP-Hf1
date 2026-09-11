@@ -32,10 +32,12 @@ function NPCManagerDB.RowToNpc(row)
         spawnDistance = tonumber(row.spawn_distance) or Config.Defaults.spawnDistance,
         target = {
             enabled = metadata.targetEnabled == true,
+            mode = metadata.targetMode or ((metadata.dialogue and metadata.dialogue.enabled) and 'talk' or 'event'),
             label = metadata.targetLabel or Config.Defaults.targetLabel,
             icon = metadata.targetIcon or Config.Defaults.targetIcon,
             event = metadata.targetEvent or '',
         },
+        dialogue = type(metadata.dialogue) == 'table' and metadata.dialogue or { enabled = false, text = '', replies = {} },
         createdBy = row.created_by,
         createdAt = row.created_at,
         updatedAt = row.updated_at,
@@ -54,9 +56,11 @@ end
 function NPCManagerDB.Insert(data, creator)
     local metadata = json.encode({
         targetEnabled = data.target.enabled == true,
+        targetMode = data.target.mode or 'event',
         targetLabel = data.target.label or '',
         targetIcon = data.target.icon or '',
         targetEvent = data.target.event or '',
+        dialogue = data.dialogue or { enabled = false, text = '', replies = {} },
     })
 
     return MySQL.insert.await([[
@@ -82,9 +86,11 @@ end
 function NPCManagerDB.Update(data)
     local metadata = json.encode({
         targetEnabled = data.target.enabled == true,
+        targetMode = data.target.mode or 'event',
         targetLabel = data.target.label or '',
         targetIcon = data.target.icon or '',
         targetEvent = data.target.event or '',
+        dialogue = data.dialogue or { enabled = false, text = '', replies = {} },
     })
 
     return MySQL.update.await([[

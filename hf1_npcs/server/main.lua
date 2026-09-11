@@ -29,6 +29,21 @@ local function sanitizeNpc(data, requireId)
     if model == '' or name == '' then return nil, 'Name and model are required.' end
 
     local target = type(data.target) == 'table' and data.target or {}
+    local dialogue = type(data.dialogue) == 'table' and data.dialogue or {}
+    local dialogueReplies = type(dialogue.replies) == 'table' and dialogue.replies or {}
+    local cleanedReplies = {}
+    for i = 1, math.min(#dialogueReplies, 4) do
+        local reply = type(dialogueReplies[i]) == 'table' and dialogueReplies[i] or {}
+        local label = sanitizeString(reply.label, 120)
+        if label ~= '' then
+            cleanedReplies[#cleanedReplies + 1] = {
+                label = label,
+                response = sanitizeString(reply.response, 500),
+                event = sanitizeString(reply.event, 120),
+                close = reply.close ~= false,
+            }
+        end
+    end
 
     local cleaned = {
         id = requireId and math.floor(data.id) or nil,
@@ -47,14 +62,29 @@ local function sanitizeNpc(data, requireId)
         spawnDistance = math.max(25.0, math.min(500.0, tonumber(data.spawnDistance) or Config.Defaults.spawnDistance)),
         target = {
             enabled = target.enabled == true,
+            mode = sanitizeString(target.mode, 20),
             label = sanitizeString(target.label, 80),
             icon = sanitizeString(target.icon, 80),
             event = sanitizeString(target.event, 120),
         },
+        dialogue = {
+            enabled = dialogue.enabled == true,
+            text = sanitizeString(dialogue.text, 500),
+            replies = cleanedReplies,
+        },
     }
 
+    if cleaned.target.mode ~= 'talk' and cleaned.target.mode ~= 'event' then
+        cleaned.target.mode = cleaned.dialogue.enabled and 'talk' or 'event'
+    end
     if cleaned.target.label == '' then cleaned.target.label = Config.Defaults.targetLabel end
     if cleaned.target.icon == '' then cleaned.target.icon = Config.Defaults.targetIcon end
+    if cleaned.target.mode == 'talk' and cleaned.dialogue.text == '' then
+        return nil, 'Talk to NPC requires an opening line.'
+    end
+    if cleaned.target.mode == 'event' and cleaned.target.enabled and cleaned.target.event == '' then
+        return nil, 'Direct Client Event interaction requires an event name.'
+    end
 
     return cleaned
 end

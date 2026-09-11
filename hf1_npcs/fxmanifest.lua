@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'OpenAI / ChatGPT'
 description 'Persistent NPC creator and manager for Qbox using ox_lib and oxmysql'
-version '1.0.3'
+version '1.1.0-talk-test'
 
 lua54 'yes'
 

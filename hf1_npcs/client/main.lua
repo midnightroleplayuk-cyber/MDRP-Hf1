@@ -39,6 +39,96 @@ function NPCManager.LoadModel(model)
     return hash
 end
 
+
+local function triggerNpcClientEvent(eventName, npc, entity, reply)
+    if not eventName or eventName == '' then return end
+    TriggerEvent(eventName, {
+        npcId = npc.id,
+        entity = entity,
+        npc = npc,
+        reply = reply,
+    })
+end
+
+local function openNpcDialogue(npc, entity)
+    local dialogue = npc.dialogue or {}
+    local replies = dialogue.replies or {}
+    if not dialogue.enabled or not dialogue.text or dialogue.text == '' then
+        NPCManager.Notify('This NPC has no dialogue configured.', 'error')
+        return
+    end
+
+    local menuId = ('hf1_npcs:dialogue:%s'):format(npc.id)
+    local options = {
+        {
+            title = npc.name or 'NPC',
+            description = dialogue.text,
+            icon = 'fa-solid fa-comment-dots',
+            disabled = true,
+        }
+    }
+
+    for i = 1, #replies do
+        local reply = replies[i]
+        if reply.label and reply.label ~= '' then
+            options[#options + 1] = {
+                title = reply.label,
+                icon = 'fa-solid fa-reply',
+                onSelect = function()
+                    triggerNpcClientEvent(reply.event, npc, entity, reply)
+
+                    if reply.response and reply.response ~= '' then
+                        local responseMenuId = ('hf1_npcs:dialogue:%s:reply:%s'):format(npc.id, i)
+                        local responseOptions = {
+                            {
+                                title = npc.name or 'NPC',
+                                description = reply.response,
+                                icon = 'fa-solid fa-comment-dots',
+                                disabled = true,
+                            }
+                        }
+
+                        if reply.close == false then
+                            responseOptions[#responseOptions + 1] = {
+                                title = 'Back to conversation',
+                                icon = 'fa-solid fa-arrow-left',
+                                onSelect = function()
+                                    lib.showContext(menuId)
+                                end
+                            }
+                        else
+                            responseOptions[#responseOptions + 1] = {
+                                title = 'Goodbye',
+                                icon = 'fa-solid fa-door-open',
+                            }
+                        end
+
+                        lib.registerContext({
+                            id = responseMenuId,
+                            title = npc.name or 'NPC',
+                            options = responseOptions,
+                        })
+                        lib.showContext(responseMenuId)
+                    elseif reply.close == false then
+                        lib.showContext(menuId)
+                    end
+                end
+            }
+        end
+    end
+
+    if #options == 1 then
+        options[#options + 1] = { title = 'Goodbye', icon = 'fa-solid fa-door-open' }
+    end
+
+    lib.registerContext({
+        id = menuId,
+        title = npc.name or 'NPC',
+        options = options,
+    })
+    lib.showContext(menuId)
+end
+
 local function clearTarget(id, entity)
     if NPCManager.targets[id] and GetResourceState('ox_target') == 'started' and entity and DoesEntityExist(entity) then
         pcall(function()
@@ -51,7 +141,7 @@ end
 local function setupTarget(npc, entity)
     clearTarget(npc.id, entity)
 
-    if not npc.target or not npc.target.enabled or npc.target.event == '' then return end
+    if not npc.target or not npc.target.enabled then return end
     if GetResourceState('ox_target') ~= 'started' then return end
 
     local optionName = ('hf1_npcs:%s'):format(npc.id)
@@ -62,11 +152,12 @@ local function setupTarget(npc, entity)
             label = npc.target.label or 'Interact',
             distance = 2.5,
             onSelect = function(data)
-                TriggerEvent(npc.target.event, {
-                    npcId = npc.id,
-                    entity = data.entity,
-                    npc = npc,
-                })
+                local mode = npc.target.mode or ((npc.dialogue and npc.dialogue.enabled) and 'talk' or 'event')
+                if mode == 'talk' then
+                    openNpcDialogue(npc, data.entity)
+                elseif npc.target.event and npc.target.event ~= '' then
+                    triggerNpcClientEvent(npc.target.event, npc, data.entity)
+                end
             end
         }
     })
