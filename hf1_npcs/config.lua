@@ -42,8 +42,9 @@ Config.Placement = {
     -- Fallback correction used only if a ped has no usable foot bones.
     groundOffset = 0.0,
     -- Foot bones are a little above the visible bottom of the shoe. This small
-    -- allowance places the actual sole on the selected surface.
-    soleOffset = 0.025,
+    -- clearance keeps the visible sole just above the collision plane to avoid
+    -- shoe clipping while keeping preview and final spawn perfectly matched.
+    soleOffset = 0.045,
 }
 
 Config.Sync = {
