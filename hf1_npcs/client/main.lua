@@ -64,7 +64,7 @@ local function runDialogueAction(reply, npc, entity, showNode, currentNode)
         if nextStep then showNode(nextStep) else showNode(currentNode) end
     elseif action == 'client_event' then
         triggerNpcClientEvent(reply.event, npc, entity, reply)
-        lib.hideContext()
+        lib.hideMenu(false)
     elseif action == 'server_event' then
         if reply.event and reply.event ~= '' then
             TriggerServerEvent(reply.event, {
@@ -73,14 +73,14 @@ local function runDialogueAction(reply, npc, entity, showNode, currentNode)
                 reply = reply,
             })
         end
-        lib.hideContext()
+        lib.hideMenu(false)
     elseif action == 'command' then
         if reply.command and reply.command ~= '' then ExecuteCommand(reply.command) end
-        lib.hideContext()
+        lib.hideMenu(false)
     elseif action == 'back' then
         showNode(currentNode)
     else
-        lib.hideContext()
+        lib.hideMenu(false)
     end
 end
 
@@ -97,13 +97,17 @@ local function checkReplyCondition(reply)
     return result.allowed == true, result.reason
 end
 
-local function showDialogueContext(context)
-    -- ox_lib can emit a browser ResizeObserver warning if one context replaces
-    -- another in the same frame. Give the NUI a moment to settle between views.
-    lib.hideContext(false)
-    Wait(80)
-    lib.registerContext(context)
-    lib.showContext(context.id)
+local function showDialogueMenu(menu)
+    -- Player dialogue uses ox_lib's keyboard menu rather than Context Menu.
+    -- This avoids the context component's repeated ResizeObserver layout work
+    -- while still keeping the conversation inside ox_lib.
+    if lib.getOpenMenu() then
+        lib.hideMenu(false)
+        Wait(50)
+    end
+
+    lib.registerMenu(menu.data, menu.callback)
+    lib.showMenu(menu.data.id)
 end
 
 local function openNpcDialogue(npc, entity)
@@ -122,22 +126,25 @@ local function openNpcDialogue(npc, entity)
 
     local showNode
     showNode = function(nodeIndex)
-        local text, replies = nodeData(nodeIndex)
-        if not text then
+        local textLine, replies = nodeData(nodeIndex)
+        if not textLine then
             NPCManager.Notify('That dialogue step no longer exists.', 'error')
-            lib.hideContext()
+            lib.hideMenu(false)
             return
         end
 
         local menuId = ('hf1_npcs:dialogue:%s:node:%s'):format(npc.id, nodeIndex)
         local options = {
             {
-                title = ('%s Says:'):format(npc.name or 'NPC'),
-                description = text,
+                label = ('%s Says:'):format(npc.name or 'NPC'),
+                description = textLine,
                 icon = 'fa-solid fa-comment-dots',
-                readOnly = true,
+                close = false,
+                args = { kind = 'speech' },
             }
         }
+
+        local actions = {}
 
         for i = 1, #replies do
             local reply = replies[i]
@@ -146,58 +153,96 @@ local function openNpcDialogue(npc, entity)
                 local visibility = type(reply.condition) == 'table' and reply.condition.visibility or 'hidden'
 
                 if allowed or visibility == 'locked' then
-                    local capturedReply = reply
-                    local capturedAllowed = allowed
-                    local capturedReason = reason
-                    options[#options + 1] = {
-                        title = capturedReply.label,
-                        description = (not capturedAllowed and capturedReason) or nil,
-                        icon = capturedAllowed and (capturedReply.icon or 'fa-solid fa-reply') or 'fa-solid fa-lock',
-                        disabled = not capturedAllowed,
-                        onSelect = capturedAllowed and function()
-                            local function doAction()
-                                runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
-                            end
-
-                            if capturedReply.response and capturedReply.response ~= '' then
-                                local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, i)
-                                showDialogueContext({
-                                    id = responseId,
-                                    title = npc.name or 'NPC',
-                                    options = {
-                                        {
-                                            title = ('%s Says:'):format(npc.name or 'NPC'),
-                                            description = capturedReply.response,
-                                            icon = 'fa-solid fa-comment-dots',
-                                            readOnly = true,
-                                        },
-                                        {
-                                            title = capturedReply.action == 'branch' and 'Continue' or (capturedReply.action == 'back' and 'Back to conversation' or 'Continue'),
-                                            icon = capturedReply.action == 'close' and 'fa-solid fa-door-open' or 'fa-solid fa-arrow-right',
-                                            onSelect = doAction,
-                                        }
-                                    }
-                                })
-                            else
-                                doAction()
-                            end
-                        end or nil,
+                    local optionIndex = #options + 1
+                    options[optionIndex] = {
+                        label = allowed and reply.label or ('🔒 %s'):format(reply.label),
+                        description = allowed and nil or reason,
+                        icon = allowed and (reply.icon or 'fa-solid fa-reply') or 'fa-solid fa-lock',
+                        close = allowed,
+                        args = { kind = allowed and 'reply' or 'locked', replyIndex = i },
                     }
+                    actions[optionIndex] = allowed and reply or false
                 end
             end
         end
 
-        options[#options + 1] = {
-            title = 'Goodbye',
+        local goodbyeIndex = #options + 1
+        options[goodbyeIndex] = {
+            label = 'Goodbye',
             icon = 'fa-solid fa-door-open',
-            onSelect = function() lib.hideContext() end,
+            close = true,
+            args = { kind = 'goodbye' },
         }
 
-        showDialogueContext({ id = menuId, title = npc.name or 'NPC', options = options })
+        showDialogueMenu({
+            data = {
+                id = menuId,
+                title = npc.name or 'NPC',
+                position = 'top-right',
+                canClose = true,
+                options = options,
+            },
+            callback = function(selected, scrollIndex, args)
+                if selected == 1 or (args and args.kind == 'speech') then
+                    return
+                end
+
+                if selected == goodbyeIndex or (args and args.kind == 'goodbye') then
+                    lib.hideMenu(false)
+                    return
+                end
+
+                local capturedReply = actions[selected]
+                if not capturedReply then
+                    -- Locked options deliberately do nothing and stay open.
+                    return
+                end
+
+                local function doAction()
+                    runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
+                end
+
+                if capturedReply.response and capturedReply.response ~= '' then
+                    local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, selected)
+                    showDialogueMenu({
+                        data = {
+                            id = responseId,
+                            title = ('%s Says:'):format(npc.name or 'NPC'),
+                            position = 'top-right',
+                            canClose = true,
+                            options = {
+                                {
+                                    label = capturedReply.response,
+                                    icon = 'fa-solid fa-comment-dots',
+                                    close = false,
+                                    args = { kind = 'speech' },
+                                },
+                                {
+                                    label = capturedReply.action == 'branch' and 'Continue'
+                                        or (capturedReply.action == 'back' and 'Back to conversation' or 'Continue'),
+                                    icon = capturedReply.action == 'close' and 'fa-solid fa-door-open'
+                                        or 'fa-solid fa-arrow-right',
+                                    close = true,
+                                    args = { kind = 'continue' },
+                                }
+                            }
+                        },
+                        callback = function(responseSelected, responseScroll, responseArgs)
+                            if responseSelected == 1 or (responseArgs and responseArgs.kind == 'speech') then
+                                return
+                            end
+                            doAction()
+                        end
+                    })
+                else
+                    doAction()
+                end
+            end
+        })
     end
 
-    -- Let ox_target close its own NUI before opening the conversation context.
-    Wait(100)
+    -- Give ox_target time to finish closing before mounting the ox_lib menu.
+    Wait(120)
     showNode(0)
 end
 
