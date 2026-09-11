@@ -61,8 +61,8 @@ local function openNpcDialogue(npc, entity)
     local menuId = ('hf1_npcs:dialogue:%s'):format(npc.id)
     local options = {
         {
-            title = dialogue.text,
-            description = ('%s says'):format(npc.name or 'NPC'),
+            title = ('%s Says:'):format(npc.name or 'NPC'),
+            description = dialogue.text,
             icon = 'fa-solid fa-comment-dots',
             readOnly = true,
         }
@@ -81,8 +81,8 @@ local function openNpcDialogue(npc, entity)
                         local responseMenuId = ('hf1_npcs:dialogue:%s:reply:%s'):format(npc.id, i)
                         local responseOptions = {
                             {
-                                title = reply.response,
-                                description = ('%s says'):format(npc.name or 'NPC'),
+                                title = ('%s Says:'):format(npc.name or 'NPC'),
+                                description = reply.response,
                                 icon = 'fa-solid fa-comment-dots',
                                 readOnly = true,
                             }
@@ -100,6 +100,9 @@ local function openNpcDialogue(npc, entity)
                             responseOptions[#responseOptions + 1] = {
                                 title = 'Goodbye',
                                 icon = 'fa-solid fa-door-open',
+                                onSelect = function()
+                                    lib.hideContext()
+                                end
                             }
                         end
 
@@ -118,7 +121,13 @@ local function openNpcDialogue(npc, entity)
     end
 
     if #options == 1 then
-        options[#options + 1] = { title = 'Goodbye', icon = 'fa-solid fa-door-open' }
+        options[#options + 1] = {
+            title = 'Goodbye',
+            icon = 'fa-solid fa-door-open',
+            onSelect = function()
+                lib.hideContext()
+            end
+        }
     end
 
     lib.registerContext({
