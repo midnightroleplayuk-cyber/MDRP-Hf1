@@ -73,19 +73,26 @@ function NPCManager.PlacePed(model, existingCoords)
         heading = h
     end
 
-    local minDim = GetModelDimensions(hash)
-    local feetOffset = 0.0
-    if minDim and minDim.z then
-        feetOffset = math.max(0.0, -minDim.z)
-    end
-
-    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
+    -- Use the same collision-based grounding as the real streamed NPC.
+    -- Bounding-box offsets vary between ped models and caused the preview to hover.
+    local preview = CreatePed(4, hash, start.x, start.y, start.z + 1.0, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
         NPCManager.Notify('Could not create the placement preview for this ped model.', 'error')
         return nil
     end
 
+    local function placePreviewAtGroundPoint(point)
+        -- Temporarily allow collision so GTA can resolve the ped against the
+        -- actual floor, exactly like spawnLocalNpc does for the final NPC.
+        SetEntityCollision(preview, true, true)
+        SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + 1.0, false, false, false)
+        RequestCollisionAtCoord(point.x, point.y, point.z)
+        PlaceEntityOnGroundProperly(preview)
+        SetEntityCollision(preview, false, false)
+    end
+
+    placePreviewAtGroundPoint(start)
     SetEntityAlpha(preview, 190, false)
     SetEntityCollision(preview, false, false)
     SetEntityInvincible(preview, true)
@@ -97,6 +104,8 @@ function NPCManager.PlacePed(model, existingCoords)
     local confirmed = false
     local cancelled = false
     local hasChosenPosition = existingCoords ~= nil
+    local previewNeedsGroundSnap = false
+    local manualHeightOffset = 0.0
 
     lib.showTextUI(
         '[MOUSE] Aim  [LEFT CLICK] Set Position  [W/S/A/D] Fine Move\n' ..
@@ -142,6 +151,8 @@ function NPCManager.PlacePed(model, existingCoords)
                 local distanceFromPlayer = #(mouseHit - originalPlayerCoords)
                 if distanceFromPlayer <= Config.Placement.maxDistanceFromPlayer then
                     coords = mouseHit
+                    manualHeightOffset = 0.0
+                    previewNeedsGroundSnap = true
                     hasChosenPosition = true
                 else
                     NPCManager.Notify(('Placement is limited to %.0f metres from you.'):format(Config.Placement.maxDistanceFromPlayer), 'error')
@@ -162,9 +173,20 @@ function NPCManager.PlacePed(model, existingCoords)
         if IsDisabledControlPressed(0, 33) then coords = coords - forward * speed; moved = true end
         if IsDisabledControlPressed(0, 34) then coords = coords - right * speed; moved = true end
         if IsDisabledControlPressed(0, 35) then coords = coords + right * speed; moved = true end
-        if IsDisabledControlPressed(0, 44) then coords = coords - vec3(0.0, 0.0, Config.Placement.verticalSpeed); moved = true end
-        if IsDisabledControlPressed(0, 38) then coords = coords + vec3(0.0, 0.0, Config.Placement.verticalSpeed); moved = true end
-        if moved then hasChosenPosition = true end
+
+        if IsDisabledControlPressed(0, 44) then
+            manualHeightOffset = manualHeightOffset - Config.Placement.verticalSpeed
+            moved = true
+        end
+        if IsDisabledControlPressed(0, 38) then
+            manualHeightOffset = manualHeightOffset + Config.Placement.verticalSpeed
+            moved = true
+        end
+
+        if moved then
+            previewNeedsGroundSnap = true
+            hasChosenPosition = true
+        end
 
         if IsDisabledControlPressed(0, 174) then
             SetEntityHeading(preview, h + Config.Placement.rotateSpeed)
@@ -178,9 +200,17 @@ function NPCManager.PlacePed(model, existingCoords)
             coords = originalPlayerCoords + (direction / dist) * Config.Placement.maxDistanceFromPlayer
         end
 
-        -- Offset only the translucent preview by the model's lowest bound. The
-        -- saved coordinate stays as the actual surface/feet position.
-        SetEntityCoordsNoOffset(preview, coords.x, coords.y, coords.z + feetOffset, false, false, false)
+        if previewNeedsGroundSnap then
+            -- Resolve the visual preview against real collision, matching the
+            -- final streamed spawn. Horizontal nudges stay grounded; Q/E adds
+            -- an intentional visual height offset on top.
+            placePreviewAtGroundPoint(coords)
+            if math.abs(manualHeightOffset) > 0.0001 then
+                local grounded = GetEntityCoords(preview)
+                SetEntityCoordsNoOffset(preview, grounded.x, grounded.y, grounded.z + manualHeightOffset, false, false, false)
+            end
+            previewNeedsGroundSnap = false
+        end
 
         if IsDisabledControlJustPressed(0, 191) then
             if hasChosenPosition then
