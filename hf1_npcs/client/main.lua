@@ -127,16 +127,10 @@ local function spawnLocalNpc(npc)
         return nil
     end
 
-    -- Saved Z is the surface/feet position chosen in placement.lua. GTA ped
-    -- coordinates use the model origin, which sits above the soles for most
-    -- models, so recreate the same model-specific offset used by the preview.
-    local minDim = GetModelDimensions(hash)
-    local feetOffset = 0.0
-    if minDim and minDim.z then
-        feetOffset = math.max(0.0, -minDim.z)
-    end
-
-    local spawnZ = npc.coords.z + feetOffset
+    -- Spawn slightly above the saved surface, then let GTA place the entity on
+    -- the actual collision below it. Model bounds are not a reliable measure of
+    -- where a ped's soles touch the floor and can leave some models hovering.
+    local spawnZ = npc.coords.z + 1.0
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         SetModelAsNoLongerNeeded(hash)
@@ -146,6 +140,16 @@ local function spawnLocalNpc(npc)
 
     SetEntityAsMissionEntity(ped, true, true)
     SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
+    SetEntityHeading(ped, npc.coords.w or 0.0)
+
+    -- Give collision a moment to resolve, then snap the ped onto the floor.
+    RequestCollisionAtCoord(npc.coords.x, npc.coords.y, npc.coords.z)
+    local timeout = GetGameTimer() + 1000
+    while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < timeout do
+        Wait(0)
+    end
+
+    PlaceEntityOnGroundProperly(ped)
     SetEntityHeading(ped, npc.coords.w or 0.0)
     SetModelAsNoLongerNeeded(hash)
 
