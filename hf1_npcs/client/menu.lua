@@ -679,7 +679,18 @@ local function deleteNpc(npc)
     end
 end
 
+local function safeShowContext(id, delay)
+    if lib.getOpenContextMenu and lib.getOpenContextMenu() then
+        lib.hideContext(false)
+        Wait(delay or 120)
+    else
+        Wait(delay or 80)
+    end
+    lib.showContext(id)
+end
+
 local function openNpcActions(npc)
+    Wait(30)
     lib.registerContext({
         id = 'hf1_npcs_actions',
         title = ('#%s - %s'):format(npc.id, npc.name),
@@ -719,7 +730,7 @@ local function openNpcActions(npc)
         }
     })
 
-    lib.showContext('hf1_npcs_actions')
+    safeShowContext('hf1_npcs_actions', 120)
 end
 
 local function manageNpcs(query)
@@ -798,6 +809,7 @@ local function manageNpcs(query)
         end
     end
 
+    Wait(30)
     lib.registerContext({
         id = 'hf1_npcs_manage',
         title = query == ''
@@ -806,7 +818,7 @@ local function manageNpcs(query)
         menu = 'hf1_npcs_main',
         options = options
     })
-    lib.showContext('hf1_npcs_manage')
+    safeShowContext('hf1_npcs_manage', 120)
 end
 
 function NPCManager.OpenMainMenu()
@@ -815,6 +827,7 @@ function NPCManager.OpenMainMenu()
         return
     end
 
+    Wait(30)
     lib.registerContext({
         id = 'hf1_npcs_main',
         title = 'HF1 NPCs',
@@ -843,5 +856,5 @@ function NPCManager.OpenMainMenu()
         }
     })
 
-    lib.showContext('hf1_npcs_main')
+    safeShowContext('hf1_npcs_main', 120)
 end

@@ -98,11 +98,17 @@ local function checkReplyCondition(reply)
 end
 
 local function showDialogueContext(context)
-    -- ox_lib can emit a browser ResizeObserver warning if one context replaces
-    -- another in the same frame. Give the NUI a moment to settle between views.
-    lib.hideContext(false)
-    Wait(80)
+    -- Keep one ox_lib context alive at a time and give NUI layout a full frame
+    -- to settle before mounting the next view.
+    if lib.getOpenContextMenu and lib.getOpenContextMenu() then
+        lib.hideContext(false)
+        Wait(140)
+    else
+        Wait(80)
+    end
+
     lib.registerContext(context)
+    Wait(20)
     lib.showContext(context.id)
 end
 
@@ -197,7 +203,7 @@ local function openNpcDialogue(npc, entity)
     end
 
     -- Let ox_target close its own NUI before opening the conversation context.
-    Wait(180)
+    Wait(250)
     showNode(0)
 end
 
