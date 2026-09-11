@@ -73,11 +73,13 @@ function NPCManager.PlacePed(model, existingCoords)
         heading = h
     end
 
-    -- Spawn the preview from the model's feet position, then remove any small
-    -- remaining hover using GetEntityHeightAboveGround once collision is ready.
+    -- GTA stores a ped's entity origin above the soles. Treat our saved/selected Z
+    -- as the surface under the feet, then raise the entity origin by the model's
+    -- lower-bound distance. Do not subtract HeightAboveGround afterwards: that
+    -- would put the origin back on the floor and bury half the ped.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.abs(minDim.z)
-    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset + 0.10, heading, false, false)
+    local feetOffset = math.max(0.0, -minDim.z)
+    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
         NPCManager.Notify('Could not create the placement preview for this ped model.', 'error')
@@ -85,24 +87,12 @@ function NPCManager.PlacePed(model, existingCoords)
     end
 
     local function placePreviewAtGroundPoint(point)
-        SetEntityCollision(preview, true, true)
         RequestCollisionAtCoord(point.x, point.y, point.z)
 
-        -- Put the model origin high enough that its lowest bound is just above
-        -- the selected surface. This is supported in client Lua for all peds.
-        SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + feetOffset + 0.10, false, false, false)
-
-        -- Once collision is available, remove the actual measured gap. This
-        -- corrects models whose bounding box extends a little below the soles.
-        if HasCollisionLoadedAroundEntity(preview) then
-            local height = GetEntityHeightAboveGround(preview)
-            if height and height > 0.001 and height < 2.0 then
-                local pos = GetEntityCoords(preview)
-                SetEntityCoordsNoOffset(preview, pos.x, pos.y, pos.z - height, false, false, false)
-            end
-        end
-
-        SetEntityCollision(preview, false, false)
+        -- `point.z` is the surface under the NPC's feet. Ped coordinates use the
+        -- model origin, so offset upward by the distance from origin to the model's
+        -- lowest bound. This gives the same result for preview and final spawn.
+        SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + feetOffset, false, false, false)
     end
 
     placePreviewAtGroundPoint(start)

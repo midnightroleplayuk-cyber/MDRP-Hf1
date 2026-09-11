@@ -127,11 +127,12 @@ local function spawnLocalNpc(npc)
         return nil
     end
 
-    -- Treat the saved Z as the floor point. Start from the model's lower bound,
-    -- then remove any remaining measured gap after collision has loaded.
+    -- Saved Z is the surface under the NPC's feet. Ped entity coordinates use
+    -- the model origin, so raise that origin by the model's lower-bound distance.
+    -- Do not later subtract GetEntityHeightAboveGround: doing so buries the ped.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.abs(minDim.z)
-    local spawnZ = npc.coords.z + feetOffset + 0.10
+    local feetOffset = math.max(0.0, -minDim.z)
+    local spawnZ = npc.coords.z + feetOffset
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         SetModelAsNoLongerNeeded(hash)
@@ -143,22 +144,7 @@ local function spawnLocalNpc(npc)
     SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
     SetEntityHeading(ped, npc.coords.w or 0.0)
 
-    -- Give collision a moment to resolve, then remove the measured gap between
-    -- the ped and the floor. This avoids the unavailable PlaceEntityOnGroundProperly
-    -- helper and keeps preview/final placement on the same maths.
     RequestCollisionAtCoord(npc.coords.x, npc.coords.y, npc.coords.z)
-    local timeout = GetGameTimer() + 1000
-    while not HasCollisionLoadedAroundEntity(ped) and GetGameTimer() < timeout do
-        Wait(0)
-    end
-
-    if HasCollisionLoadedAroundEntity(ped) then
-        local height = GetEntityHeightAboveGround(ped)
-        if height and height > 0.001 and height < 2.0 then
-            local pos = GetEntityCoords(ped)
-            SetEntityCoordsNoOffset(ped, pos.x, pos.y, pos.z - height, false, false, false)
-        end
-    end
 
     SetEntityHeading(ped, npc.coords.w or 0.0)
     SetModelAsNoLongerNeeded(hash)
