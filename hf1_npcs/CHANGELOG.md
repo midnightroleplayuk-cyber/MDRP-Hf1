@@ -15,3 +15,9 @@
 
 ## 1.0.0
 - Initial test release.
+
+## Talk to NPC v2
+- Added branching dialogue with up to 4 extra conversation steps.
+- Added reply actions: branch, client event, server event, command, return, and close.
+- Added friendly reply-icon selector.
+- Existing v1 dialogue remains backwards compatible.

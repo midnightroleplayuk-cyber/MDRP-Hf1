@@ -102,88 +102,187 @@ local function interactionModeForExisting(existing)
     return 'event'
 end
 
+local ReplyIcons = {
+    { label = 'Reply / Conversation', value = 'fa-solid fa-reply', icon = 'fa-solid fa-reply' },
+    { label = 'Continue / Next', value = 'fa-solid fa-arrow-right', icon = 'fa-solid fa-arrow-right' },
+    { label = 'Information', value = 'fa-solid fa-circle-info', icon = 'fa-solid fa-circle-info' },
+    { label = 'Question', value = 'fa-solid fa-circle-question', icon = 'fa-solid fa-circle-question' },
+    { label = 'Shop', value = 'fa-solid fa-store', icon = 'fa-solid fa-store' },
+    { label = 'Money / Payment', value = 'fa-solid fa-money-bill', icon = 'fa-solid fa-money-bill' },
+    { label = 'Job / Briefcase', value = 'fa-solid fa-briefcase', icon = 'fa-solid fa-briefcase' },
+    { label = 'Vehicle / Garage', value = 'fa-solid fa-car', icon = 'fa-solid fa-car' },
+    { label = 'Police / Security', value = 'fa-solid fa-shield-halved', icon = 'fa-solid fa-shield-halved' },
+    { label = 'Medical', value = 'fa-solid fa-kit-medical', icon = 'fa-solid fa-kit-medical' },
+    { label = 'Key / Access', value = 'fa-solid fa-key', icon = 'fa-solid fa-key' },
+    { label = 'Package / Delivery', value = 'fa-solid fa-box', icon = 'fa-solid fa-box' },
+    { label = 'Goodbye / Leave', value = 'fa-solid fa-door-open', icon = 'fa-solid fa-door-open' },
+}
+
+local function replyIconOptions(existingIcon)
+    local options, found = {}, false
+    for i = 1, #ReplyIcons do
+        local option = ReplyIcons[i]
+        options[#options + 1] = option
+        if option.value == existingIcon then found = true end
+    end
+    if existingIcon and existingIcon ~= '' and not found then
+        table.insert(options, 1, { label = ('Current/custom icon — %s'):format(existingIcon), value = existingIcon, icon = existingIcon })
+    end
+    return options
+end
+
+local function replyActionForExisting(reply)
+    if reply.action and reply.action ~= '' then return reply.action end
+    if reply.nextStep and tonumber(reply.nextStep) then return 'branch' end
+    if reply.event and reply.event ~= '' then return 'client_event' end
+    if reply.close == false then return 'back' end
+    return 'close'
+end
+
+local function editDialogueReply(old, replyNumber, stepCount)
+    old = old or {}
+    local basic = lib.inputDialog(('Reply %s'):format(replyNumber), {
+        {
+            type = 'input', label = 'Player reply text',
+            description = 'The response option shown to the player.',
+            default = old.label or '', placeholder = 'Example: Show me what you have.', required = true, min = 1, max = 120,
+        },
+        {
+            type = 'select', label = 'Reply icon',
+            description = 'Pick a visual hint for this response.',
+            options = replyIconOptions(old.icon or 'fa-solid fa-reply'),
+            default = old.icon or 'fa-solid fa-reply', searchable = true, clearable = false, required = true,
+        },
+        {
+            type = 'textarea', label = 'NPC response before action',
+            description = 'Optional. The NPC can say this before the selected action happens.',
+            default = old.response or '', max = 500, autosize = true,
+        },
+        {
+            type = 'select', label = 'What should this reply do?',
+            description = 'Choose the result without needing to know Lua.',
+            options = {
+                { label = 'Continue to another dialogue step', value = 'branch' },
+                { label = 'Trigger a client event', value = 'client_event' },
+                { label = 'Trigger a server event', value = 'server_event' },
+                { label = 'Run a command', value = 'command' },
+                { label = 'Return to this conversation', value = 'back' },
+                { label = 'Close conversation', value = 'close' },
+            },
+            default = replyActionForExisting(old), clearable = false, required = true,
+        },
+    }, { size = 'md' })
+    if not basic then return nil end
+
+    local action = basic[4] or 'close'
+    local result = {
+        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '',
+        action = action, event = '', command = '', nextStep = nil, close = action ~= 'back' and action ~= 'branch',
+    }
+
+    if action == 'branch' then
+        if stepCount < 1 then
+            NPCManager.Notify('Add at least one extra dialogue step before using Continue to another dialogue step.', 'error')
+            return editDialogueReply(old, replyNumber, stepCount)
+        end
+        local stepOptions = {}
+        for i = 1, stepCount do stepOptions[#stepOptions + 1] = { label = ('Dialogue Step %s'):format(i), value = i } end
+        local branch = lib.inputDialog('Continue Conversation', {
+            { type = 'select', label = 'Go to dialogue step', options = stepOptions, default = tonumber(old.nextStep) or 1, clearable = false, required = true },
+        })
+        if not branch then return nil end
+        result.nextStep = tonumber(branch[1]) or 1
+    elseif action == 'client_event' or action == 'server_event' then
+        local hook = lib.inputDialog(action == 'server_event' and 'Server Event' or 'Client Event', {
+            {
+                type = 'input', label = action == 'server_event' and 'Server event name' or 'Client event name',
+                description = 'Example: myresource:server:openSomething',
+                default = old.event or '', required = true, max = 120,
+            },
+        })
+        if not hook then return nil end
+        result.event = hook[1] or ''
+    elseif action == 'command' then
+        local command = lib.inputDialog('Run Command', {
+            {
+                type = 'input', label = 'Command',
+                description = 'Enter the command without the leading slash. Example: jobs',
+                default = old.command or '', required = true, max = 120,
+            },
+        })
+        if not command then return nil end
+        result.command = (command[1] or ''):gsub('^/', '')
+    end
+
+    return result
+end
+
+local function editDialogueStep(old, stepNumber, stepCount)
+    old = old or {}
+    local oldReplies = old.replies or {}
+    local setup = lib.inputDialog(('Dialogue Step %s'):format(stepNumber), {
+        {
+            type = 'textarea', label = 'NPC line',
+            description = 'What the NPC says when the conversation reaches this step.',
+            default = old.text or '', required = true, min = 1, max = 500, autosize = true,
+        },
+        {
+            type = 'number', label = 'Number of player replies',
+            default = math.max(1, math.min(4, #oldReplies > 0 and #oldReplies or 1)), min = 1, max = 4, required = true,
+        },
+    }, { size = 'md' })
+    if not setup then return nil end
+
+    local step = { text = setup[1] or '', replies = {} }
+    local count = math.floor(tonumber(setup[2]) or 1)
+    for i = 1, count do
+        local reply = editDialogueReply(oldReplies[i], i, stepCount)
+        if not reply then return nil end
+        step.replies[#step.replies + 1] = reply
+    end
+    return step
+end
+
 local function buildDialogue(existing)
     existing = existing or {}
     local dialogue = existing.dialogue or {}
     local replies = dialogue.replies or {}
+    local oldSteps = dialogue.steps or {}
 
     local basic = lib.inputDialog('Talk to NPC', {
         {
-            type = 'textarea',
-            label = 'NPC opening line',
-            description = 'What the NPC says when a player chooses the Talk interaction.',
+            type = 'textarea', label = 'NPC opening line',
+            description = 'What the NPC says when a player first chooses Talk.',
             default = dialogue.text or ('Hello, I am %s. How can I help?'):format(existing.name or 'there'),
-            required = true,
-            min = 1,
-            max = 500,
-            autosize = true,
+            required = true, min = 1, max = 500, autosize = true,
         },
         {
-            type = 'number',
-            label = 'Number of player replies',
-            description = 'You can add up to four reply buttons for this conversation.',
-            default = math.max(1, math.min(4, #replies > 0 and #replies or 1)),
-            min = 1,
-            max = 4,
-            required = true,
+            type = 'number', label = 'Number of opening replies',
+            description = 'Reply buttons shown under the opening line.',
+            default = math.max(1, math.min(4, #replies > 0 and #replies or 1)), min = 1, max = 4, required = true,
+        },
+        {
+            type = 'number', label = 'Extra dialogue steps',
+            description = 'Optional follow-up screens for branching conversations. You can add up to four.',
+            default = math.min(4, #oldSteps), min = 0, max = 4, required = true,
         },
     }, { size = 'md' })
-
     if not basic then return nil end
 
-    local result = {
-        enabled = true,
-        text = basic[1] or '',
-        replies = {},
-    }
+    local extraCount = math.floor(tonumber(basic[3]) or 0)
+    local result = { enabled = true, text = basic[1] or '', replies = {}, steps = {} }
 
-    local count = math.floor(tonumber(basic[2]) or 1)
-    for i = 1, count do
-        local old = replies[i] or {}
-        local reply = lib.inputDialog(('Player Reply %s of %s'):format(i, count), {
-            {
-                type = 'input',
-                label = 'Reply button text',
-                description = 'What the player sees as their response option.',
-                default = old.label or '',
-                placeholder = 'Example: Can you show me the shop?',
-                required = true,
-                min = 1,
-                max = 120,
-            },
-            {
-                type = 'textarea',
-                label = 'NPC response',
-                description = 'Optional. What the NPC says after this reply is chosen.',
-                default = old.response or '',
-                placeholder = 'Example: Of course, take a look at what we have.',
-                max = 500,
-                autosize = true,
-            },
-            {
-                type = 'input',
-                label = 'Client event after this reply',
-                description = 'Optional advanced hook, e.g. myresource:client:openShop',
-                default = old.event or '',
-                placeholder = 'Leave blank if this reply only shows dialogue.',
-                max = 120,
-            },
-            {
-                type = 'checkbox',
-                label = 'Close conversation after response',
-                description = 'Recommended for replies that open a shop/menu or finish the conversation.',
-                checked = old.close ~= false,
-            },
-        }, { size = 'md' })
-
+    local openingCount = math.floor(tonumber(basic[2]) or 1)
+    for i = 1, openingCount do
+        local reply = editDialogueReply(replies[i], i, extraCount)
         if not reply then return nil end
+        result.replies[#result.replies + 1] = reply
+    end
 
-        result.replies[#result.replies + 1] = {
-            label = reply[1] or '',
-            response = reply[2] or '',
-            event = reply[3] or '',
-            close = reply[4] == true,
-        }
+    for i = 1, extraCount do
+        local step = editDialogueStep(oldSteps[i], i, extraCount)
+        if not step then return nil end
+        result.steps[#result.steps + 1] = step
     end
 
     return result

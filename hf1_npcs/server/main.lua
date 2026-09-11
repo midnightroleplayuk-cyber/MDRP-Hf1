@@ -30,19 +30,53 @@ local function sanitizeNpc(data, requireId)
 
     local target = type(data.target) == 'table' and data.target or {}
     local dialogue = type(data.dialogue) == 'table' and data.dialogue or {}
+    local function sanitizeReply(reply, maxSteps)
+        reply = type(reply) == 'table' and reply or {}
+        local label = sanitizeString(reply.label, 120)
+        if label == '' then return nil end
+        local action = sanitizeString(reply.action, 20)
+        if action ~= 'branch' and action ~= 'client_event' and action ~= 'server_event' and action ~= 'command' and action ~= 'back' and action ~= 'close' then
+            if tonumber(reply.nextStep) then action = 'branch'
+            elseif sanitizeString(reply.event, 120) ~= '' then action = 'client_event'
+            elseif reply.close == false then action = 'back'
+            else action = 'close' end
+        end
+        local nextStep = math.floor(tonumber(reply.nextStep) or 0)
+        if nextStep < 1 or nextStep > maxSteps then nextStep = nil end
+        return {
+            label = label,
+            icon = sanitizeString(reply.icon, 80),
+            response = sanitizeString(reply.response, 500),
+            action = action,
+            event = sanitizeString(reply.event, 120),
+            command = sanitizeString(reply.command, 120):gsub('^/', ''),
+            nextStep = nextStep,
+            close = action ~= 'back' and action ~= 'branch',
+        }
+    end
+
+    local rawSteps = type(dialogue.steps) == 'table' and dialogue.steps or {}
+    local stepCount = math.min(#rawSteps, 4)
     local dialogueReplies = type(dialogue.replies) == 'table' and dialogue.replies or {}
     local cleanedReplies = {}
     for i = 1, math.min(#dialogueReplies, 4) do
-        local reply = type(dialogueReplies[i]) == 'table' and dialogueReplies[i] or {}
-        local label = sanitizeString(reply.label, 120)
-        if label ~= '' then
-            cleanedReplies[#cleanedReplies + 1] = {
-                label = label,
-                response = sanitizeString(reply.response, 500),
-                event = sanitizeString(reply.event, 120),
-                close = reply.close ~= false,
-            }
+        local cleanedReply = sanitizeReply(dialogueReplies[i], stepCount)
+        if cleanedReply then cleanedReplies[#cleanedReplies + 1] = cleanedReply end
+    end
+
+    local cleanedSteps = {}
+    for i = 1, stepCount do
+        local rawStep = type(rawSteps[i]) == 'table' and rawSteps[i] or {}
+        local rawReplies = type(rawStep.replies) == 'table' and rawStep.replies or {}
+        local stepReplies = {}
+        for j = 1, math.min(#rawReplies, 4) do
+            local cleanedReply = sanitizeReply(rawReplies[j], stepCount)
+            if cleanedReply then stepReplies[#stepReplies + 1] = cleanedReply end
         end
+        cleanedSteps[#cleanedSteps + 1] = {
+            text = sanitizeString(rawStep.text, 500),
+            replies = stepReplies,
+        }
     end
 
     local cleaned = {
@@ -71,6 +105,7 @@ local function sanitizeNpc(data, requireId)
             enabled = dialogue.enabled == true,
             text = sanitizeString(dialogue.text, 500),
             replies = cleanedReplies,
+            steps = cleanedSteps,
         },
     }
 

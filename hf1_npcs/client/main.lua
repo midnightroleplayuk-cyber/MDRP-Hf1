@@ -50,92 +50,124 @@ local function triggerNpcClientEvent(eventName, npc, entity, reply)
     })
 end
 
+local function runDialogueAction(reply, npc, entity, showNode, currentNode)
+    local action = reply.action
+    if not action or action == '' then
+        if reply.nextStep then action = 'branch'
+        elseif reply.event and reply.event ~= '' then action = 'client_event'
+        elseif reply.close == false then action = 'back'
+        else action = 'close' end
+    end
+
+    if action == 'branch' then
+        local nextStep = tonumber(reply.nextStep)
+        if nextStep then showNode(nextStep) else showNode(currentNode) end
+    elseif action == 'client_event' then
+        triggerNpcClientEvent(reply.event, npc, entity, reply)
+        lib.hideContext()
+    elseif action == 'server_event' then
+        if reply.event and reply.event ~= '' then
+            TriggerServerEvent(reply.event, {
+                npcId = npc.id,
+                npc = npc,
+                reply = reply,
+            })
+        end
+        lib.hideContext()
+    elseif action == 'command' then
+        if reply.command and reply.command ~= '' then ExecuteCommand(reply.command) end
+        lib.hideContext()
+    elseif action == 'back' then
+        showNode(currentNode)
+    else
+        lib.hideContext()
+    end
+end
+
 local function openNpcDialogue(npc, entity)
     local dialogue = npc.dialogue or {}
-    local replies = dialogue.replies or {}
     if not dialogue.enabled or not dialogue.text or dialogue.text == '' then
         NPCManager.Notify('This NPC has no dialogue configured.', 'error')
         return
     end
 
-    local menuId = ('hf1_npcs:dialogue:%s'):format(npc.id)
-    local options = {
-        {
-            title = ('%s Says:'):format(npc.name or 'NPC'),
-            description = dialogue.text,
-            icon = 'fa-solid fa-comment-dots',
-            readOnly = true,
-        }
-    }
-
-    for i = 1, #replies do
-        local reply = replies[i]
-        if reply.label and reply.label ~= '' then
-            options[#options + 1] = {
-                title = reply.label,
-                icon = 'fa-solid fa-reply',
-                onSelect = function()
-                    triggerNpcClientEvent(reply.event, npc, entity, reply)
-
-                    if reply.response and reply.response ~= '' then
-                        local responseMenuId = ('hf1_npcs:dialogue:%s:reply:%s'):format(npc.id, i)
-                        local responseOptions = {
-                            {
-                                title = ('%s Says:'):format(npc.name or 'NPC'),
-                                description = reply.response,
-                                icon = 'fa-solid fa-comment-dots',
-                                readOnly = true,
-                            }
-                        }
-
-                        if reply.close == false then
-                            responseOptions[#responseOptions + 1] = {
-                                title = 'Back to conversation',
-                                icon = 'fa-solid fa-arrow-left',
-                                onSelect = function()
-                                    lib.showContext(menuId)
-                                end
-                            }
-                        else
-                            responseOptions[#responseOptions + 1] = {
-                                title = 'Goodbye',
-                                icon = 'fa-solid fa-door-open',
-                                onSelect = function()
-                                    lib.hideContext()
-                                end
-                            }
-                        end
-
-                        lib.registerContext({
-                            id = responseMenuId,
-                            title = npc.name or 'NPC',
-                            options = responseOptions,
-                        })
-                        lib.showContext(responseMenuId)
-                    elseif reply.close == false then
-                        lib.showContext(menuId)
-                    end
-                end
-            }
-        end
+    local function nodeData(nodeIndex)
+        if nodeIndex == 0 then return dialogue.text, dialogue.replies or {} end
+        local step = dialogue.steps and dialogue.steps[nodeIndex]
+        if not step then return nil, nil end
+        return step.text, step.replies or {}
     end
 
-    if #options == 1 then
+    local showNode
+    showNode = function(nodeIndex)
+        local text, replies = nodeData(nodeIndex)
+        if not text then
+            NPCManager.Notify('That dialogue step no longer exists.', 'error')
+            lib.hideContext()
+            return
+        end
+
+        local menuId = ('hf1_npcs:dialogue:%s:node:%s'):format(npc.id, nodeIndex)
+        local options = {
+            {
+                title = ('%s Says:'):format(npc.name or 'NPC'),
+                description = text,
+                icon = 'fa-solid fa-comment-dots',
+                readOnly = true,
+            }
+        }
+
+        for i = 1, #replies do
+            local reply = replies[i]
+            if reply.label and reply.label ~= '' then
+                local capturedReply = reply
+                options[#options + 1] = {
+                    title = capturedReply.label,
+                    icon = capturedReply.icon or 'fa-solid fa-reply',
+                    onSelect = function()
+                        local function doAction()
+                            runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
+                        end
+
+                        if capturedReply.response and capturedReply.response ~= '' then
+                            local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, i)
+                            lib.registerContext({
+                                id = responseId,
+                                title = npc.name or 'NPC',
+                                options = {
+                                    {
+                                        title = ('%s Says:'):format(npc.name or 'NPC'),
+                                        description = capturedReply.response,
+                                        icon = 'fa-solid fa-comment-dots',
+                                        readOnly = true,
+                                    },
+                                    {
+                                        title = capturedReply.action == 'branch' and 'Continue' or (capturedReply.action == 'back' and 'Back to conversation' or 'Continue'),
+                                        icon = capturedReply.action == 'close' and 'fa-solid fa-door-open' or 'fa-solid fa-arrow-right',
+                                        onSelect = doAction,
+                                    }
+                                }
+                            })
+                            lib.showContext(responseId)
+                        else
+                            doAction()
+                        end
+                    end
+                }
+            end
+        end
+
         options[#options + 1] = {
             title = 'Goodbye',
             icon = 'fa-solid fa-door-open',
-            onSelect = function()
-                lib.hideContext()
-            end
+            onSelect = function() lib.hideContext() end,
         }
+
+        lib.registerContext({ id = menuId, title = npc.name or 'NPC', options = options })
+        lib.showContext(menuId)
     end
 
-    lib.registerContext({
-        id = menuId,
-        title = npc.name or 'NPC',
-        options = options,
-    })
-    lib.showContext(menuId)
+    showNode(0)
 end
 
 local function clearTarget(id, entity)
