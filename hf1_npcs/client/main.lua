@@ -127,7 +127,17 @@ local function spawnLocalNpc(npc)
         return nil
     end
 
-    local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, npc.coords.z, npc.coords.w or 0.0, false, false)
+    -- Saved Z is the surface/feet position chosen in placement.lua. GTA ped
+    -- coordinates use the model origin, which sits above the soles for most
+    -- models, so recreate the same model-specific offset used by the preview.
+    local minDim = GetModelDimensions(hash)
+    local feetOffset = 0.0
+    if minDim and minDim.z then
+        feetOffset = math.max(0.0, -minDim.z)
+    end
+
+    local spawnZ = npc.coords.z + feetOffset
+    local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         SetModelAsNoLongerNeeded(hash)
         dbg(('failed creating local npc #%s (%s)'):format(npc.id, npc.model))
@@ -135,7 +145,7 @@ local function spawnLocalNpc(npc)
     end
 
     SetEntityAsMissionEntity(ped, true, true)
-    SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, npc.coords.z, false, false, false)
+    SetEntityCoordsNoOffset(ped, npc.coords.x, npc.coords.y, spawnZ, false, false, false)
     SetEntityHeading(ped, npc.coords.w or 0.0)
     SetModelAsNoLongerNeeded(hash)
 
