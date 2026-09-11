@@ -224,7 +224,8 @@ local function buildNpc(existing, replacingPosition)
 
     local coords = existing and existing.coords or nil
     if not existing or replacingPosition then
-        coords = NPCManager.PlacePed(model, replacingPosition and existing.coords or nil)
+        local existingCoords = existing and existing.coords or nil
+        coords = NPCManager.PlacePed(model, replacingPosition and existingCoords or nil)
         if not coords then return nil end
     end
 

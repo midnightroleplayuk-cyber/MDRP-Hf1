@@ -12,6 +12,30 @@ local function rightVectorFromHeading(heading)
     return vec3(-math.sin(r), math.cos(r), 0.0)
 end
 
+-- Cast a ray straight through the centre of the gameplay camera. The mouse still
+-- controls the camera during placement, so this behaves like a simple point-and-click
+-- world picker without needing NUI cursor focus.
+local function getMouseWorldHit(ignoreEntity)
+    local camCoords = GetGameplayCamCoord()
+    local direction = rotationToDirection(GetGameplayCamRot(2))
+    local destination = camCoords + (direction * 1000.0)
+
+    local ray = StartShapeTestRay(
+        camCoords.x, camCoords.y, camCoords.z,
+        destination.x, destination.y, destination.z,
+        -1,
+        ignoreEntity or 0,
+        7
+    )
+
+    local _, hit, endCoords = GetShapeTestResult(ray)
+    if hit == 1 then
+        return endCoords
+    end
+
+    return nil
+end
+
 function NPCManager.PlacePed(model, existingCoords)
     local hash, err = NPCManager.LoadModel(model)
     if not hash then
@@ -52,20 +76,56 @@ function NPCManager.PlacePed(model, existingCoords)
     local cancelled = false
 
     lib.showTextUI(
-        '[W/S] Forward/Back  [A/D] Left/Right  [Q/E] Down/Up\n' ..
-        '[←/→] Rotate  [SHIFT] Fast  [CTRL] Precision  [ENTER] Save Position  [BACKSPACE] Cancel',
+        '[MOUSE] Aim  [LEFT CLICK] Place Ped  [W/S] Forward/Back  [A/D] Left/Right\n' ..
+        '[Q/E] Down/Up  [←/→] Rotate  [SHIFT] Fast  [CTRL] Precision  [ENTER] Save  [BACKSPACE] Cancel',
         { position = 'top-center', icon = 'person' }
     )
 
     while DoesEntityExist(preview) and not confirmed and not cancelled do
         Wait(0)
 
-        DisableControlAction(0, 30, true)
-        DisableControlAction(0, 31, true)
-        DisableControlAction(0, 21, true)
-        DisableControlAction(0, 36, true)
-        DisableControlAction(0, 191, true)
-        DisableControlAction(0, 177, true)
+        -- Freeze normal player actions but deliberately leave mouse-look enabled.
+        DisableControlAction(0, 30, true) -- move left/right axis
+        DisableControlAction(0, 31, true) -- move forward/back axis
+        DisableControlAction(0, 32, true) -- W
+        DisableControlAction(0, 33, true) -- S
+        DisableControlAction(0, 34, true) -- A
+        DisableControlAction(0, 35, true) -- D
+        DisableControlAction(0, 44, true) -- Q
+        DisableControlAction(0, 38, true) -- E
+        DisableControlAction(0, 21, true) -- SHIFT
+        DisableControlAction(0, 36, true) -- CTRL
+        DisableControlAction(0, 174, true) -- left arrow
+        DisableControlAction(0, 175, true) -- right arrow
+        DisableControlAction(0, 191, true) -- ENTER
+        DisableControlAction(0, 177, true) -- BACKSPACE
+        DisableControlAction(0, 24, true) -- LEFT CLICK / attack
+        DisableControlAction(0, 25, true) -- aim weapon
+        DisablePlayerFiring(PlayerId(), true)
+
+        -- Mouse placement: aim the camera at a surface and left-click to snap the
+        -- preview there. A marker indicates the exact point that will be used.
+        local mouseHit = getMouseWorldHit(playerPed)
+        if mouseHit then
+            DrawMarker(
+                28,
+                mouseHit.x, mouseHit.y, mouseHit.z + 0.03,
+                0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0,
+                0.18, 0.18, 0.18,
+                255, 255, 255, 210,
+                false, false, 2, false, nil, nil, false
+            )
+
+            if IsDisabledControlJustPressed(0, 24) then
+                local distanceFromPlayer = #(mouseHit - originalPlayerCoords)
+                if distanceFromPlayer <= Config.Placement.maxDistanceFromPlayer then
+                    coords = vec3(mouseHit.x, mouseHit.y, mouseHit.z)
+                else
+                    NPCManager.Notify(('Placement is limited to %.0f metres from you.'):format(Config.Placement.maxDistanceFromPlayer), 'error')
+                end
+            end
+        end
 
         local speed = Config.Placement.moveSpeed
         if IsDisabledControlPressed(0, 21) then speed = speed * Config.Placement.fastMultiplier end
@@ -75,16 +135,16 @@ function NPCManager.PlacePed(model, existingCoords)
         local forward = vec3(-math.sin(math.rad(h)), math.cos(math.rad(h)), 0.0)
         local right = rightVectorFromHeading(h)
 
-        if IsControlPressed(0, 32) then coords = coords + forward * speed end -- W
-        if IsControlPressed(0, 33) then coords = coords - forward * speed end -- S
-        if IsControlPressed(0, 34) then coords = coords - right * speed end -- A
-        if IsControlPressed(0, 35) then coords = coords + right * speed end -- D
-        if IsControlPressed(0, 44) then coords = coords - vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- Q
-        if IsControlPressed(0, 38) then coords = coords + vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- E
+        if IsDisabledControlPressed(0, 32) then coords = coords + forward * speed end -- W
+        if IsDisabledControlPressed(0, 33) then coords = coords - forward * speed end -- S
+        if IsDisabledControlPressed(0, 34) then coords = coords - right * speed end -- A
+        if IsDisabledControlPressed(0, 35) then coords = coords + right * speed end -- D
+        if IsDisabledControlPressed(0, 44) then coords = coords - vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- Q
+        if IsDisabledControlPressed(0, 38) then coords = coords + vec3(0.0, 0.0, Config.Placement.verticalSpeed) end -- E
 
-        if IsControlPressed(0, 174) then
+        if IsDisabledControlPressed(0, 174) then
             SetEntityHeading(preview, h + Config.Placement.rotateSpeed)
-        elseif IsControlPressed(0, 175) then
+        elseif IsDisabledControlPressed(0, 175) then
             SetEntityHeading(preview, h - Config.Placement.rotateSpeed)
         end
 
