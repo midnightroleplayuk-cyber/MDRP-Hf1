@@ -57,7 +57,14 @@ function NPCManager.PlacePed(model, existingCoords)
         heading = GetEntityHeading(playerPed)
     end
 
-    local preview = CreatePed(4, hash, start.x, start.y, start.z, heading, false, false)
+    -- Keep `coords.z` as the actual ground/saved Z used by the normal NPC spawn code.
+    -- SET_ENTITY_COORDS_NO_OFFSET positions the model by its origin, so use the
+    -- model's lowest bound only for the translucent placement preview. This keeps
+    -- the ped's feet on the raycast surface without saving an artificially raised Z.
+    local minDim, _ = GetModelDimensions(hash)
+    local feetOffset = math.max(0.0, -(minDim.z or 0.0))
+
+    local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
         NPCManager.Notify('Could not create placement preview.', 'error')
@@ -153,7 +160,7 @@ function NPCManager.PlacePed(model, existingCoords)
             coords = originalPlayerCoords + (direction / #direction) * Config.Placement.maxDistanceFromPlayer
         end
 
-        SetEntityCoordsNoOffset(preview, coords.x, coords.y, coords.z, false, false, false)
+        SetEntityCoordsNoOffset(preview, coords.x, coords.y, coords.z + feetOffset, false, false, false)
 
         if IsDisabledControlJustPressed(0, 191) then
             confirmed = true
@@ -166,11 +173,12 @@ function NPCManager.PlacePed(model, existingCoords)
 
     local result
     if confirmed and DoesEntityExist(preview) then
-        local finalCoords = GetEntityCoords(preview)
+        -- Save the ground point, not the preview model-origin Z. The server's
+        -- CreatePed call expects these normal world/ground coordinates.
         result = {
-            x = finalCoords.x,
-            y = finalCoords.y,
-            z = finalCoords.z,
+            x = coords.x,
+            y = coords.y,
+            z = coords.z,
             w = GetEntityHeading(preview)
         }
     end
