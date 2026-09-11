@@ -217,36 +217,37 @@ local function pedModelOptions(existingModel)
 end
 
 local function buildNpc(existing, replacingPosition)
+    -- Keep the searchable select before the normal text input. ox_lib's searchable
+    -- select can take focus as the dialog mounts; placing the NPC name last leaves
+    -- the normal text field as the active field instead of opening the model list.
     local initial = lib.inputDialog(existing and 'Edit NPC' or 'Create NPC', {
+        {
+            type = 'select',
+            label = 'Ped model',
+            description = 'Click the box to open the Cfx.re/FiveM ped list, then type to filter it.',
+            options = pedModelOptions(existing and existing.model or nil),
+            default = existing and existing.model or nil,
+            searchable = true,
+            placeholder = 'Click to choose or type to search...',
+            clearable = false,
+            required = true,
+        },
         {
             type = 'input',
             label = 'NPC name',
             description = 'Friendly name used in the manager.',
             default = existing and existing.name or '',
+            placeholder = 'Enter an NPC name...',
             required = true,
             min = 2,
             max = 100,
-        },
-        {
-            type = 'select',
-            label = 'Ped model',
-            description = 'Choose a Cfx.re/FiveM ped model. Start typing a model name to instantly filter the list.',
-            options = pedModelOptions(existing and existing.model or nil),
-            default = existing and existing.model or nil,
-            searchable = true,
-            -- Do not open the model list just because the field receives focus.
-            -- Clicking the field opens it; typing still opens and filters matches.
-            openOnFocus = false,
-            placeholder = 'Click to choose or type to search...',
-            clearable = false,
-            required = true,
         },
     })
 
     if not initial then return nil end
 
-    local name = initial[1]
-    local model = initial[2]
+    local model = initial[1]
+    local name = initial[2]
 
     if not model or model == '' then
         NPCManager.Notify('Please select a ped model.', 'error')
@@ -413,47 +414,87 @@ local function openNpcActions(npc)
     lib.showContext('hf1_npcs_actions')
 end
 
-local function manageNpcs()
+local function manageNpcs(query)
     local list = lib.callback.await('hf1_npcs:server:getNpcs', false) or {}
     if #list == 0 then
         NPCManager.Notify('There are no saved NPCs yet.', 'inform')
         return
     end
 
-    local search = lib.inputDialog('Manage NPCs', {
-        {
-            type = 'input',
-            label = 'Search',
-            description = 'Optional: search by ID, name or model.',
-            placeholder = 'Leave blank for all NPCs',
-        }
-    })
-
-    if not search then return end
-    local query = tostring(search[1] or ''):lower()
-    local options = {}
+    query = tostring(query or ''):lower()
+    local filtered = {}
 
     for i = 1, #list do
         local npc = list[i]
         local haystack = ('%s %s %s'):format(npc.id, npc.name, npc.model):lower()
         if query == '' or haystack:find(query, 1, true) then
+            filtered[#filtered + 1] = npc
+        end
+    end
+
+    local options = {
+        {
+            title = query == '' and 'Search / Filter NPCs' or ('Search / Filter NPCs — "%s"'):format(query),
+            description = 'Search the list below by NPC name, ped model or ID.',
+            icon = 'magnifying-glass',
+            onSelect = function()
+                local search = lib.inputDialog('Search NPCs', {
+                    {
+                        type = 'input',
+                        label = 'Search',
+                        description = 'Type part of a name, model or NPC ID.',
+                        placeholder = 'e.g. receptionist, cop, 12',
+                        default = query ~= '' and query or '',
+                    }
+                })
+
+                if not search then
+                    manageNpcs(query)
+                    return
+                end
+
+                manageNpcs(search[1] or '')
+            end,
+        }
+    }
+
+    if query ~= '' then
+        options[#options + 1] = {
+            title = 'Clear Search',
+            description = ('Show all %s saved NPCs again.'):format(#list),
+            icon = 'filter-circle-xmark',
+            onSelect = function()
+                manageNpcs('')
+            end,
+        }
+    end
+
+    if #filtered == 0 then
+        options[#options + 1] = {
+            title = 'No NPCs matched this search',
+            description = 'Try another name, model or ID, or clear the search.',
+            icon = 'circle-info',
+            disabled = true,
+        }
+    else
+        for i = 1, #filtered do
+            local npc = filtered[i]
             options[#options + 1] = {
                 title = ('#%s - %s'):format(npc.id, npc.name),
-                description = ('%s | %.1f, %.1f, %.1f'):format(npc.model, npc.coords.x, npc.coords.y, npc.coords.z),
+                description = ('%s  |  %.1f, %.1f, %.1f'):format(npc.model, npc.coords.x, npc.coords.y, npc.coords.z),
                 icon = 'person',
-                onSelect = function() openNpcActions(npc) end,
+                onSelect = function()
+                    openNpcActions(npc)
+                end,
             }
         end
     end
 
-    if #options == 0 then
-        NPCManager.Notify('No NPCs matched that search.', 'inform')
-        return
-    end
-
     lib.registerContext({
         id = 'hf1_npcs_manage',
-        title = ('Manage NPCs (%s)'):format(#options),
+        title = query == ''
+            and ('Manage NPCs (%s)'):format(#list)
+            or ('Manage NPCs (%s of %s)'):format(#filtered, #list),
         menu = 'hf1_npcs_main',
         options = options
     })
