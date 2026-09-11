@@ -44,7 +44,7 @@ Config.Placement = {
     -- Foot bones are a little above the visible bottom of the shoe. This small
     -- clearance keeps the visible sole just above the collision plane to avoid
     -- shoe clipping while keeping preview and final spawn perfectly matched.
-    soleOffset = 0.065,
+    soleOffset = 0.090,
 }
 
 Config.Sync = {
