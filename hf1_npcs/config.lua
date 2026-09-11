@@ -39,6 +39,9 @@ Config.Placement = {
     rotateSpeed = 1.25,
     verticalSpeed = 0.025,
     maxDistanceFromPlayer = 30.0,
+    -- Small visual correction because GTA model bounds can extend below the visible soles.
+    -- Negative values sink the ped slightly; this is shared by preview + final spawn.
+    groundOffset = -0.045,
 }
 
 Config.Sync = {

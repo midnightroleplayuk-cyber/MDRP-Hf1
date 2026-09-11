@@ -75,10 +75,11 @@ function NPCManager.PlacePed(model, existingCoords)
 
     -- GTA stores a ped's entity origin above the soles. Treat our saved/selected Z
     -- as the surface under the feet, then raise the entity origin by the model's
-    -- lower-bound distance. Do not subtract HeightAboveGround afterwards: that
+    -- lower-bound distance, then apply the small shared visual ground correction.
+    -- Do not subtract HeightAboveGround afterwards: that
     -- would put the origin back on the floor and bury half the ped.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.max(0.0, -minDim.z)
+    local feetOffset = math.max(0.0, -minDim.z) + (Config.Placement.groundOffset or 0.0)
     local preview = CreatePed(4, hash, start.x, start.y, start.z + feetOffset, heading, false, false)
     if not preview or preview == 0 then
         SetModelAsNoLongerNeeded(hash)
@@ -91,7 +92,8 @@ function NPCManager.PlacePed(model, existingCoords)
 
         -- `point.z` is the surface under the NPC's feet. Ped coordinates use the
         -- model origin, so offset upward by the distance from origin to the model's
-        -- lowest bound. This gives the same result for preview and final spawn.
+        -- lowest bound plus the shared ground correction. This gives the same
+        -- result for preview and final spawn.
         SetEntityCoordsNoOffset(preview, point.x, point.y, point.z + feetOffset, false, false, false)
     end
 

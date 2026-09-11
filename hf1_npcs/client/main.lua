@@ -128,10 +128,11 @@ local function spawnLocalNpc(npc)
     end
 
     -- Saved Z is the surface under the NPC's feet. Ped entity coordinates use
-    -- the model origin, so raise that origin by the model's lower-bound distance.
+    -- the model origin, so raise that origin by the model's lower-bound distance
+    -- and apply the same small visual ground correction used by the preview.
     -- Do not later subtract GetEntityHeightAboveGround: doing so buries the ped.
     local minDim, _ = GetModelDimensions(hash)
-    local feetOffset = math.max(0.0, -minDim.z)
+    local feetOffset = math.max(0.0, -minDim.z) + (Config.Placement.groundOffset or 0.0)
     local spawnZ = npc.coords.z + feetOffset
     local ped = CreatePed(4, hash, npc.coords.x, npc.coords.y, spawnZ, npc.coords.w or 0.0, false, false)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
