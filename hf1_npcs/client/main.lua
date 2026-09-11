@@ -84,6 +84,28 @@ local function runDialogueAction(reply, npc, entity, showNode, currentNode)
     end
 end
 
+local function checkReplyCondition(reply)
+    local condition = type(reply.condition) == 'table' and reply.condition or { type = 'always', visibility = 'hidden' }
+    if not condition.type or condition.type == '' or condition.type == 'always' then
+        return true, nil
+    end
+
+    local result = lib.callback.await('hf1_npcs:server:checkDialogueCondition', false, condition)
+    if type(result) ~= 'table' then
+        return false, 'Requirement check failed'
+    end
+    return result.allowed == true, result.reason
+end
+
+local function showDialogueContext(context)
+    -- ox_lib can emit a browser ResizeObserver warning if one context replaces
+    -- another in the same frame. Give the NUI a moment to settle between views.
+    lib.hideContext(false)
+    Wait(80)
+    lib.registerContext(context)
+    lib.showContext(context.id)
+end
+
 local function openNpcDialogue(npc, entity)
     local dialogue = npc.dialogue or {}
     if not dialogue.enabled or not dialogue.text or dialogue.text == '' then
@@ -120,40 +142,48 @@ local function openNpcDialogue(npc, entity)
         for i = 1, #replies do
             local reply = replies[i]
             if reply.label and reply.label ~= '' then
-                local capturedReply = reply
-                options[#options + 1] = {
-                    title = capturedReply.label,
-                    icon = capturedReply.icon or 'fa-solid fa-reply',
-                    onSelect = function()
-                        local function doAction()
-                            runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
-                        end
+                local allowed, reason = checkReplyCondition(reply)
+                local visibility = type(reply.condition) == 'table' and reply.condition.visibility or 'hidden'
 
-                        if capturedReply.response and capturedReply.response ~= '' then
-                            local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, i)
-                            lib.registerContext({
-                                id = responseId,
-                                title = npc.name or 'NPC',
-                                options = {
-                                    {
-                                        title = ('%s Says:'):format(npc.name or 'NPC'),
-                                        description = capturedReply.response,
-                                        icon = 'fa-solid fa-comment-dots',
-                                        readOnly = true,
-                                    },
-                                    {
-                                        title = capturedReply.action == 'branch' and 'Continue' or (capturedReply.action == 'back' and 'Back to conversation' or 'Continue'),
-                                        icon = capturedReply.action == 'close' and 'fa-solid fa-door-open' or 'fa-solid fa-arrow-right',
-                                        onSelect = doAction,
+                if allowed or visibility == 'locked' then
+                    local capturedReply = reply
+                    local capturedAllowed = allowed
+                    local capturedReason = reason
+                    options[#options + 1] = {
+                        title = capturedReply.label,
+                        description = (not capturedAllowed and capturedReason) or nil,
+                        icon = capturedAllowed and (capturedReply.icon or 'fa-solid fa-reply') or 'fa-solid fa-lock',
+                        disabled = not capturedAllowed,
+                        onSelect = capturedAllowed and function()
+                            local function doAction()
+                                runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
+                            end
+
+                            if capturedReply.response and capturedReply.response ~= '' then
+                                local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, i)
+                                showDialogueContext({
+                                    id = responseId,
+                                    title = npc.name or 'NPC',
+                                    options = {
+                                        {
+                                            title = ('%s Says:'):format(npc.name or 'NPC'),
+                                            description = capturedReply.response,
+                                            icon = 'fa-solid fa-comment-dots',
+                                            readOnly = true,
+                                        },
+                                        {
+                                            title = capturedReply.action == 'branch' and 'Continue' or (capturedReply.action == 'back' and 'Back to conversation' or 'Continue'),
+                                            icon = capturedReply.action == 'close' and 'fa-solid fa-door-open' or 'fa-solid fa-arrow-right',
+                                            onSelect = doAction,
+                                        }
                                     }
-                                }
-                            })
-                            lib.showContext(responseId)
-                        else
-                            doAction()
-                        end
-                    end
-                }
+                                })
+                            else
+                                doAction()
+                            end
+                        end or nil,
+                    }
+                end
             end
         end
 
@@ -163,10 +193,11 @@ local function openNpcDialogue(npc, entity)
             onSelect = function() lib.hideContext() end,
         }
 
-        lib.registerContext({ id = menuId, title = npc.name or 'NPC', options = options })
-        lib.showContext(menuId)
+        showDialogueContext({ id = menuId, title = npc.name or 'NPC', options = options })
     end
 
+    -- Let ox_target close its own NUI before opening the conversation context.
+    Wait(100)
     showNode(0)
 end
 

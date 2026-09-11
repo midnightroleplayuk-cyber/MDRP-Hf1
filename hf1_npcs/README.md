@@ -152,3 +152,17 @@ Scenarios override animations. Set Scenario to None if using a custom animation.
 
 ### ox_target does not show
 Make sure `ox_target` is started before `hf1_npcs` and the NPC has target enabled with a non-empty event name.
+
+
+## Talk to NPC conditions
+
+Dialogue replies can optionally require:
+- a Qbox job/group and minimum grade
+- an ox_inventory item count
+- the absence of an ox_inventory item
+- a minimum cash balance
+- a minimum bank balance
+
+Failed requirements can either be hidden or shown as locked replies. These checks are performed server-side when the dialogue is opened.
+
+The dialogue context also inserts a short close/open delay between ox_lib context transitions to reduce NUI `ResizeObserver loop limit exceeded` warnings during NPC conversations.

@@ -139,6 +139,78 @@ local function replyActionForExisting(reply)
     return 'close'
 end
 
+
+local function conditionForExisting(reply)
+    local condition = type(reply.condition) == 'table' and reply.condition or {}
+    return condition.type or 'always'
+end
+
+local function conditionVisibilityForExisting(reply)
+    local condition = type(reply.condition) == 'table' and reply.condition or {}
+    return condition.visibility == 'locked' and 'locked' or 'hidden'
+end
+
+local function editReplyCondition(old)
+    old = type(old) == 'table' and old or {}
+    local existing = type(old.condition) == 'table' and old.condition or {}
+
+    local choice = lib.inputDialog('Reply Requirement', {
+        {
+            type = 'select', label = 'Show this reply when...',
+            description = 'Choose who should be able to use this response.',
+            options = {
+                { label = 'Always available', value = 'always' },
+                { label = 'Player has a job / group (minimum grade)', value = 'group' },
+                { label = 'Player has an item', value = 'item' },
+                { label = 'Player does NOT have an item', value = 'no_item' },
+                { label = 'Player has enough cash', value = 'cash' },
+                { label = 'Player has enough bank money', value = 'bank' },
+            },
+            default = conditionForExisting(old), clearable = false, required = true,
+        },
+        {
+            type = 'select', label = 'If requirement is not met',
+            description = 'Hide the reply completely, or show it locked with the requirement.',
+            options = {
+                { label = 'Hide the reply', value = 'hidden' },
+                { label = 'Show it locked', value = 'locked' },
+            },
+            default = conditionVisibilityForExisting(old), clearable = false, required = true,
+        },
+    }, { size = 'md' })
+    if not choice then return nil end
+
+    local ctype = choice[1] or 'always'
+    local condition = { type = ctype, visibility = choice[2] or 'hidden', name = '', amount = 0 }
+    if ctype == 'always' then return condition end
+
+    if ctype == 'group' then
+        local detail = lib.inputDialog('Job / Group Requirement', {
+            { type = 'input', label = 'Job / group name', description = 'Example: police, ambulance, mechanic', default = existing.name or '', required = true, max = 80 },
+            { type = 'number', label = 'Minimum grade', description = '0 allows every grade in that job/group.', default = tonumber(existing.amount) or 0, min = 0, max = 100, required = true },
+        })
+        if not detail then return nil end
+        condition.name = detail[1] or ''
+        condition.amount = math.floor(tonumber(detail[2]) or 0)
+    elseif ctype == 'item' or ctype == 'no_item' then
+        local detail = lib.inputDialog(ctype == 'item' and 'Item Requirement' or 'Missing Item Requirement', {
+            { type = 'input', label = 'Item name', description = 'Use the item spawn name, e.g. water or lockpick.', default = existing.name or '', required = true, max = 80 },
+            { type = 'number', label = ctype == 'item' and 'Minimum amount' or 'Check amount', default = math.max(1, tonumber(existing.amount) or 1), min = 1, max = 100000, required = true },
+        })
+        if not detail then return nil end
+        condition.name = detail[1] or ''
+        condition.amount = math.floor(tonumber(detail[2]) or 1)
+    elseif ctype == 'cash' or ctype == 'bank' then
+        local detail = lib.inputDialog(ctype == 'cash' and 'Cash Requirement' or 'Bank Requirement', {
+            { type = 'number', label = 'Minimum amount', description = 'This only checks the balance; it does not remove money.', default = math.max(0, tonumber(existing.amount) or 0), min = 0, max = 100000000, required = true },
+        })
+        if not detail then return nil end
+        condition.amount = math.floor(tonumber(detail[1]) or 0)
+    end
+
+    return condition
+end
+
 local function editDialogueReply(old, replyNumber, stepCount)
     old = old or {}
     local basic = lib.inputDialog(('Reply %s'):format(replyNumber), {
@@ -213,6 +285,10 @@ local function editDialogueReply(old, replyNumber, stepCount)
         if not command then return nil end
         result.command = (command[1] or ''):gsub('^/', '')
     end
+
+    local condition = editReplyCondition(old)
+    if not condition then return nil end
+    result.condition = condition
 
     return result
 end

@@ -43,6 +43,21 @@ local function sanitizeNpc(data, requireId)
         end
         local nextStep = math.floor(tonumber(reply.nextStep) or 0)
         if nextStep < 1 or nextStep > maxSteps then nextStep = nil end
+
+        local rawCondition = type(reply.condition) == 'table' and reply.condition or {}
+        local conditionType = sanitizeString(rawCondition.type, 20)
+        if conditionType ~= 'group' and conditionType ~= 'item' and conditionType ~= 'no_item' and conditionType ~= 'cash' and conditionType ~= 'bank' then
+            conditionType = 'always'
+        end
+        local visibility = sanitizeString(rawCondition.visibility, 10)
+        if visibility ~= 'locked' then visibility = 'hidden' end
+        local condition = {
+            type = conditionType,
+            visibility = visibility,
+            name = sanitizeString(rawCondition.name, 80),
+            amount = math.max(0, math.floor(tonumber(rawCondition.amount) or 0)),
+        }
+
         return {
             label = label,
             icon = sanitizeString(reply.icon, 80),
@@ -52,6 +67,7 @@ local function sanitizeNpc(data, requireId)
             command = sanitizeString(reply.command, 120):gsub('^/', ''),
             nextStep = nextStep,
             close = action ~= 'back' and action ~= 'branch',
+            condition = condition,
         }
     end
 
@@ -157,6 +173,44 @@ end)
 
 lib.callback.register('hf1_npcs:server:getNpcs', function(source)
     return getList()
+end)
+
+lib.callback.register('hf1_npcs:server:checkDialogueCondition', function(source, condition)
+    condition = type(condition) == 'table' and condition or {}
+    local ctype = sanitizeString(condition.type, 20)
+    local name = sanitizeString(condition.name, 80)
+    local amount = math.max(0, math.floor(tonumber(condition.amount) or 0))
+
+    if ctype == '' or ctype == 'always' then
+        return { allowed = true }
+    end
+
+    if ctype == 'group' then
+        if name == '' then return { allowed = false, reason = 'Requires a configured job/group' } end
+        local groups = exports.qbx_core:GetGroups(source) or {}
+        local grade = tonumber(groups[name])
+        local allowed = grade ~= nil and grade >= amount
+        return { allowed = allowed, reason = ('Requires %s grade %s+'):format(name, amount) }
+    end
+
+    if ctype == 'item' or ctype == 'no_item' then
+        if name == '' then return { allowed = false, reason = 'Requires a configured item' } end
+        if GetResourceState('ox_inventory') ~= 'started' then
+            return { allowed = false, reason = 'ox_inventory is not available' }
+        end
+        local count = exports.ox_inventory:GetItemCount(source, name) or 0
+        if ctype == 'item' then
+            return { allowed = count >= math.max(1, amount), reason = ('Requires %sx %s'):format(math.max(1, amount), name) }
+        end
+        return { allowed = count < math.max(1, amount), reason = ('Unavailable while carrying %sx %s'):format(math.max(1, amount), name) }
+    end
+
+    if ctype == 'cash' or ctype == 'bank' then
+        local balance = exports.qbx_core:GetMoney(source, ctype) or 0
+        return { allowed = balance >= amount, reason = ('Requires $%s %s'):format(amount, ctype) }
+    end
+
+    return { allowed = true }
 end)
 
 lib.callback.register('hf1_npcs:server:createNpc', function(source, data)

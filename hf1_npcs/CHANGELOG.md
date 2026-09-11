@@ -1,3 +1,11 @@
+# 1.2.0 Talk Conditions
+
+- Added per-reply conditions for Qbox groups/grades, ox_inventory items, cash and bank balances.
+- Added hidden or locked behaviour for unavailable replies.
+- Requirement checks run server-side.
+- Smoothed ox_lib dialogue context transitions to reduce ResizeObserver warnings.
+- Existing dialogue remains compatible; no SQL migration required.
+
 # Changelog
 
 ## 1.1.0-talk-test
