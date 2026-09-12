@@ -1,13 +1,26 @@
 let activeAudio = null;
 
-function reportSoundError(sound, reason) {
+function postNui(name, payload = {}) {
     try {
-        fetch(`https://${GetParentResourceName()}/dialogueSoundError`, {
+        return fetch(`https://${GetParentResourceName()}/${name}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ sound, reason: String(reason || 'Playback failed') })
-        }).catch(() => {});
-    } catch (_) {}
+            body: JSON.stringify(payload)
+        });
+    } catch (_) {
+        return Promise.reject(_);
+    }
+}
+
+window.addEventListener('load', () => {
+    postNui('dialogueSoundReady', { ok: true }).catch(() => {});
+});
+
+function reportSoundError(sound, reason) {
+    postNui('dialogueSoundError', {
+        sound,
+        reason: String(reason || 'Playback failed')
+    }).catch(() => {});
 }
 
 function stopActiveAudio() {
@@ -30,21 +43,34 @@ function tryPlaySound(sound, volume, urls, index = 0) {
     audio.volume = volume;
     audio.src = urls[index];
 
-    let failed = false;
+    let settled = false;
 
-    const fail = (reason) => {
-        if (failed) return;
-        failed = true;
+    const tryNext = (reason) => {
+        if (settled) return;
+        settled = true;
         try {
             audio.pause();
             audio.currentTime = 0;
         } catch (_) {}
-        tryPlaySound(sound, volume, urls, index + 1);
+
+        if (index + 1 < urls.length) {
+            tryPlaySound(sound, volume, urls, index + 1);
+        } else {
+            reportSoundError(sound, reason);
+        }
     };
+
+    audio.addEventListener('canplaythrough', () => {
+        postNui('dialogueSoundDebug', {
+            stage: 'canplay',
+            sound,
+            url: urls[index]
+        }).catch(() => {});
+    }, { once: true });
 
     audio.addEventListener('error', () => {
         const code = audio.error ? audio.error.code : 'unknown';
-        fail(`NUI audio error (${code})`);
+        tryNext(`Audio load error code ${code} at ${urls[index]}`);
     }, { once: true });
 
     audio.addEventListener('ended', () => {
@@ -52,9 +78,15 @@ function tryPlaySound(sound, volume, urls, index = 0) {
     }, { once: true });
 
     audio.play().then(() => {
+        settled = true;
         activeAudio = audio;
+        postNui('dialogueSoundDebug', {
+            stage: 'playing',
+            sound,
+            url: urls[index]
+        }).catch(() => {});
     }).catch((err) => {
-        fail(err && err.message ? err.message : 'audio.play() rejected');
+        tryNext(err && err.message ? err.message : 'audio.play() rejected');
     });
 }
 
@@ -63,6 +95,12 @@ window.addEventListener('message', (event) => {
     if (data.action !== 'playDialogueSound') return;
 
     const sound = String(data.sound || '');
+
+    postNui('dialogueSoundDebug', {
+        stage: 'received',
+        sound
+    }).catch(() => {});
+
     if (!/^[A-Za-z0-9_.-]+\.ogg$/i.test(sound) || sound.includes('..')) {
         reportSoundError(sound, 'Invalid sound filename');
         return;
@@ -75,9 +113,6 @@ window.addEventListener('message', (event) => {
     const encoded = encodeURIComponent(sound);
     const resource = GetParentResourceName();
 
-    // First use the page-relative path. Since ui_page is html/index.html,
-    // this resolves to html/sounds/<file>.ogg.
-    // Fallback to FiveM's explicit cfx-nui resource URL.
     const urls = [
         `./sounds/${encoded}`,
         `https://cfx-nui-${resource}/html/sounds/${encoded}`

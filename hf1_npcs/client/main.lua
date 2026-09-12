@@ -67,6 +67,42 @@ RegisterNUICallback('dialogueSoundError', function(data, cb)
     cb({ ok = true })
 end)
 
+local soundNuiReady = false
+
+RegisterNUICallback('dialogueSoundReady', function(_, cb)
+    soundNuiReady = true
+    if Config.Debug then
+        print('[hf1_npcs] Dialogue sound NUI is ready')
+    end
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('dialogueSoundDebug', function(data, cb)
+    local stage = type(data) == 'table' and tostring(data.stage or 'unknown') or 'unknown'
+    local sound = type(data) == 'table' and tostring(data.sound or '') or ''
+    local url = type(data) == 'table' and tostring(data.url or '') or ''
+    print(('[hf1_npcs] sound debug stage=%s sound=%s url=%s'):format(stage, sound, url))
+    cb({ ok = true })
+end)
+
+RegisterCommand('hf1npctestsound', function(_, args)
+    local requested = args and args[1] or ''
+    local soundName = requested ~= '' and requested or ((Config.DialogueSounds or {})[1] and (Config.DialogueSounds or {})[1].value or '')
+
+    if soundName == '' then
+        NPCManager.Notify('No dialogue sound is configured to test.', 'error')
+        return
+    end
+
+    if not isConfiguredDialogueSound(soundName) then
+        NPCManager.Notify(('Sound "%s" is not listed in Config.DialogueSounds.'):format(soundName), 'error')
+        return
+    end
+
+    NPCManager.Notify(('Sending test sound: %s | NUI ready: %s'):format(soundName, soundNuiReady and 'yes' or 'no'), 'inform')
+    playDialogueSound(soundName)
+end, false)
+
 local function triggerNpcClientEvent(eventName, npc, entity, reply)
     if not eventName or eventName == '' then return end
     TriggerEvent(eventName, {
