@@ -91,7 +91,7 @@ local function runDialogueAction(reply, npc, entity, showNode, currentNode)
         if nextStep then showNode(nextStep) else showNode(currentNode) end
     elseif action == 'client_event' then
         triggerNpcClientEvent(reply.event, npc, entity, reply)
-        lib.hideMenu(false)
+        lib.hideContext(false)
     elseif action == 'server_event' then
         if reply.event and reply.event ~= '' then
             TriggerServerEvent(reply.event, {
@@ -100,14 +100,14 @@ local function runDialogueAction(reply, npc, entity, showNode, currentNode)
                 reply = reply,
             })
         end
-        lib.hideMenu(false)
+        lib.hideContext(false)
     elseif action == 'command' then
         if reply.command and reply.command ~= '' then ExecuteCommand(reply.command) end
-        lib.hideMenu(false)
+        lib.hideContext(false)
     elseif action == 'back' then
         showNode(currentNode)
     else
-        lib.hideMenu(false)
+        lib.hideContext(false)
     end
 end
 

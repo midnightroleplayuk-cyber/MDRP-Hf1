@@ -6,8 +6,56 @@ function reportSoundError(sound, reason) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json; charset=UTF-8' },
             body: JSON.stringify({ sound, reason: String(reason || 'Playback failed') })
-        });
+        }).catch(() => {});
     } catch (_) {}
+}
+
+function stopActiveAudio() {
+    if (!activeAudio) return;
+    try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+    } catch (_) {}
+    activeAudio = null;
+}
+
+function tryPlaySound(sound, volume, urls, index = 0) {
+    if (index >= urls.length) {
+        reportSoundError(sound, 'Could not load sound from any NUI path');
+        return;
+    }
+
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.volume = volume;
+    audio.src = urls[index];
+
+    let failed = false;
+
+    const fail = (reason) => {
+        if (failed) return;
+        failed = true;
+        try {
+            audio.pause();
+            audio.currentTime = 0;
+        } catch (_) {}
+        tryPlaySound(sound, volume, urls, index + 1);
+    };
+
+    audio.addEventListener('error', () => {
+        const code = audio.error ? audio.error.code : 'unknown';
+        fail(`NUI audio error (${code})`);
+    }, { once: true });
+
+    audio.addEventListener('ended', () => {
+        if (activeAudio === audio) activeAudio = null;
+    }, { once: true });
+
+    audio.play().then(() => {
+        activeAudio = audio;
+    }).catch((err) => {
+        fail(err && err.message ? err.message : 'audio.play() rejected');
+    });
 }
 
 window.addEventListener('message', (event) => {
@@ -20,35 +68,20 @@ window.addEventListener('message', (event) => {
         return;
     }
 
-    if (activeAudio) {
-        activeAudio.pause();
-        activeAudio.currentTime = 0;
-        activeAudio = null;
-    }
+    stopActiveAudio();
 
     const volumeValue = Number(data.volume);
     const volume = Math.max(0, Math.min(1, Number.isFinite(volumeValue) ? volumeValue : 0.65));
+    const encoded = encodeURIComponent(sound);
     const resource = GetParentResourceName();
-    const url = `https://${resource}/sounds/${encodeURIComponent(sound)}`;
-    const audio = new Audio();
-    audio.preload = 'auto';
-    audio.src = url;
-    audio.volume = volume;
 
-    audio.addEventListener('ended', () => {
-        if (activeAudio === audio) activeAudio = null;
-    }, { once: true });
+    // First use the page-relative path. Since ui_page is html/index.html,
+    // this resolves to html/sounds/<file>.ogg.
+    // Fallback to FiveM's explicit cfx-nui resource URL.
+    const urls = [
+        `./sounds/${encoded}`,
+        `https://cfx-nui-${resource}/html/sounds/${encoded}`
+    ];
 
-    audio.addEventListener('error', () => {
-        const code = audio.error ? audio.error.code : 'unknown';
-        reportSoundError(sound, `NUI audio error (${code})`);
-        if (activeAudio === audio) activeAudio = null;
-    }, { once: true });
-
-    activeAudio = audio;
-    audio.load();
-    audio.play().catch((err) => {
-        reportSoundError(sound, err && err.message ? err.message : 'audio.play() rejected');
-        if (activeAudio === audio) activeAudio = null;
-    });
+    tryPlaySound(sound, volume, urls);
 });
