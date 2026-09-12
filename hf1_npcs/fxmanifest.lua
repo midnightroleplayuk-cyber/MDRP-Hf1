@@ -7,14 +7,6 @@ version '1.3.0-dialogue-sounds'
 
 lua54 'yes'
 
-ui_page 'html/sound.html'
-
-files {
-    'html/sound.html',
-    'html/sounds/*.ogg',
-    'html/sounds/README.txt'
-}
-
 shared_scripts {
     '@ox_lib/init.lua',
     'config.lua',
@@ -36,6 +28,7 @@ server_scripts {
 }
 
 dependencies {
+    'hf1_npc_sounds',
     'qbx_core',
     'ox_lib',
     'oxmysql'

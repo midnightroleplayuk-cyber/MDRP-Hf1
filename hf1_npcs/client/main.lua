@@ -53,78 +53,16 @@ end
 
 local function playDialogueSound(soundName)
     if not isConfiguredDialogueSound(soundName) then return end
-    SendNUIMessage({
-        action = 'playDialogueSound',
-        sound = soundName,
-        volume = math.max(0.0, math.min(1.0, tonumber(Config.DialogueSoundVolume) or 0.65)),
-    })
+
+    if GetResourceState('hf1_npc_sounds') ~= 'started' then
+        NPCManager.Notify('Dialogue sound player is not started (hf1_npc_sounds).', 'error')
+        return
+    end
+
+    TriggerEvent('hf1_npc_sounds:play', soundName,
+        math.max(0.0, math.min(1.0, tonumber(Config.DialogueSoundVolume) or 0.65))
+    )
 end
-
-RegisterNUICallback('dialogueSoundError', function(data, cb)
-    local sound = type(data) == 'table' and tostring(data.sound or '') or ''
-    local reason = type(data) == 'table' and tostring(data.reason or 'Playback failed') or 'Playback failed'
-    NPCManager.Notify(('Could not play dialogue sound %s: %s'):format(sound ~= '' and sound or '(unknown)', reason), 'error')
-    cb({ ok = true })
-end)
-
-local soundNuiReady = false
-
-RegisterNUICallback('dialogueSoundReady', function(_, cb)
-    soundNuiReady = true
-    if Config.Debug then
-        print('[hf1_npcs] Dialogue sound NUI is ready')
-    end
-    cb({ ok = true })
-end)
-
-CreateThread(function()
-    Wait(1000)
-    for _ = 1, 8 do
-        if soundNuiReady then break end
-        SendNUIMessage({ action = 'soundNuiPing' })
-        Wait(750)
-    end
-end)
-
-RegisterNUICallback('dialogueSoundDebug', function(data, cb)
-    local stage = type(data) == 'table' and tostring(data.stage or 'unknown') or 'unknown'
-    local sound = type(data) == 'table' and tostring(data.sound or '') or ''
-    local url = type(data) == 'table' and tostring(data.url or '') or ''
-    print(('[hf1_npcs] sound debug stage=%s sound=%s url=%s'):format(stage, sound, url))
-    cb({ ok = true })
-end)
-
-RegisterCommand('hf1npctestsound', function(_, args)
-    local requested = args and args[1] or ''
-    local soundName = requested ~= '' and requested or ((Config.DialogueSounds or {})[1] and (Config.DialogueSounds or {})[1].value or '')
-
-    if soundName == '' then
-        NPCManager.Notify('No dialogue sound is configured to test.', 'error')
-        return
-    end
-
-    if not isConfiguredDialogueSound(soundName) then
-        NPCManager.Notify(('Sound "%s" is not listed in Config.DialogueSounds.'):format(soundName), 'error')
-        return
-    end
-
-    if not soundNuiReady then
-        SendNUIMessage({ action = 'soundNuiPing' })
-        local timeout = GetGameTimer() + 2500
-        while not soundNuiReady and GetGameTimer() < timeout do
-            Wait(100)
-        end
-    end
-
-    NPCManager.Notify(('Sending test sound: %s | NUI ready: %s'):format(soundName, soundNuiReady and 'yes' or 'no'), 'inform')
-
-    if not soundNuiReady then
-        NPCManager.Notify('Dialogue sound NUI did not respond. Check F8 for NUI errors.', 'error')
-        return
-    end
-
-    playDialogueSound(soundName)
-end, false)
 
 local function triggerNpcClientEvent(eventName, npc, entity, reply)
     if not eventName or eventName == '' then return end

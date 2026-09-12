@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>hf1_npc_sounds</title>
+</head>
+<body>
+<script>
+let currentAudio = null;
+
+function stopAudio() {
+    if (!currentAudio) return;
+    try {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+    } catch (_) {}
+    currentAudio = null;
+}
+
+window.addEventListener('message', function(event) {
+    const data = event.data || {};
+
+    if (data.action === 'stop') {
+        stopAudio();
+        return;
+    }
+
+    if (data.action !== 'play') return;
+
+    const sound = String(data.sound || '');
+    if (!/^[A-Za-z0-9_.-]+\.ogg$/i.test(sound) || sound.includes('..')) return;
+
+    stopAudio();
+
+    const audio = new Audio('sounds/' + encodeURIComponent(sound));
+    const requestedVolume = Number(data.volume);
+    audio.volume = Number.isFinite(requestedVolume)
+        ? Math.max(0, Math.min(1, requestedVolume))
+        : 0.65;
+
+    currentAudio = audio;
+    audio.play().catch(function(err) {
+        console.error('[hf1_npc_sounds] Audio playback failed:', sound, err);
+        currentAudio = null;
+    });
+
+    audio.addEventListener('ended', function() {
+        if (currentAudio === audio) currentAudio = null;
+    }, { once: true });
+});
+</script>
+</body>
+</html>
