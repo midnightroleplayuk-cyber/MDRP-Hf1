@@ -19,13 +19,3 @@ RegisterNetEvent('hf1_npc_sounds:stop', function()
     SendNUIMessage({ action = 'stop' })
 end)
 
-RegisterCommand('hf1npctestsound', function(_, args)
-    local soundName = args and args[1] or 'weekend.ogg'
-    if not validSoundName(soundName) then
-        print(('[hf1_npc_sounds] Invalid sound name: %s'):format(tostring(soundName)))
-        return
-    end
-
-    print(('[hf1_npc_sounds] Playing test sound: %s'):format(soundName))
-    TriggerEvent('hf1_npc_sounds:play', soundName, 0.8)
-end, false)

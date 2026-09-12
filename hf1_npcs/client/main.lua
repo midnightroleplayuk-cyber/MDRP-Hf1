@@ -185,13 +185,24 @@ local function openNpcDialogue(npc, entity)
                         icon = capturedAllowed and (capturedReply.icon or 'fa-solid fa-reply') or 'fa-solid fa-lock',
                         disabled = not capturedAllowed,
                         onSelect = capturedAllowed and function()
-                            playDialogueSound(capturedReply.sound)
+                            local soundTiming = capturedReply.soundTiming or capturedReply.sound_timing or 'continue'
+
+                            if soundTiming == 'immediate' then
+                                playDialogueSound(capturedReply.sound)
+                            end
 
                             local function doAction()
+                                if soundTiming == 'continue' then
+                                    playDialogueSound(capturedReply.sound)
+                                end
                                 runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
                             end
 
                             if capturedReply.response and capturedReply.response ~= '' then
+                                if soundTiming == 'response' then
+                                    playDialogueSound(capturedReply.sound)
+                                end
+
                                 local responseId = ('hf1_npcs:dialogue:%s:node:%s:reply:%s'):format(npc.id, nodeIndex, i)
                                 showDialogueContext({
                                     id = responseId,
@@ -211,7 +222,12 @@ local function openNpcDialogue(npc, entity)
                                     }
                                 })
                             else
-                                doAction()
+                                -- There is no separate response/Continue screen, so delayed
+                                -- timings fall back to playing immediately before the action.
+                                if soundTiming ~= 'immediate' then
+                                    playDialogueSound(capturedReply.sound)
+                                end
+                                runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
                             end
                         end or nil,
                     }

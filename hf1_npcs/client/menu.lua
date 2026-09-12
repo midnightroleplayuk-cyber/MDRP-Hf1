@@ -260,9 +260,21 @@ local function editDialogueReply(old, replyNumber, stepCount)
         },
         {
             type = 'select', label = 'Response sound',
-            description = 'Optional .ogg sound played locally when the player chooses this reply.',
+            description = 'Optional .ogg sound for this reply.',
             options = dialogueSoundOptions(old.sound or ''),
             default = old.sound or '', clearable = false,
+        },
+        {
+            type = 'select', label = 'When should the sound play?',
+            description = 'Usually "When Continue is pressed" feels most natural after an NPC response.',
+            options = {
+                { label = 'When Continue is pressed (Recommended)', value = 'continue' },
+                { label = 'When the NPC response appears', value = 'response' },
+                { label = 'Immediately when the player chooses the reply', value = 'immediate' },
+            },
+            default = old.soundTiming or old.sound_timing or 'continue',
+            clearable = false,
+            required = true,
         },
         {
             type = 'select', label = 'What should this reply do?',
@@ -280,9 +292,11 @@ local function editDialogueReply(old, replyNumber, stepCount)
     }, { size = 'md' })
     if not basic then return nil end
 
-    local action = basic[5] or 'close'
+    local action = basic[6] or 'close'
     local result = {
-        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '', sound = (basic[4] == 'none' and '' or (basic[4] or '')),
+        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '',
+        sound = (basic[4] == 'none' and '' or (basic[4] or '')),
+        soundTiming = basic[5] or 'continue',
         action = action, event = '', command = '', nextStep = nil, close = action ~= 'back' and action ~= 'branch',
     }
 
