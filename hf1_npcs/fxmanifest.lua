@@ -7,11 +7,10 @@ version '1.3.0-dialogue-sounds'
 
 lua54 'yes'
 
-ui_page 'html/index.html'
+ui_page 'html/sound.html'
 
 files {
-    'html/index.html',
-    'html/app.js',
+    'html/sound.html',
     'html/sounds/*.ogg',
     'html/sounds/README.txt'
 }

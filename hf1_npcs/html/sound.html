@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>hf1_npcs sound</title>
+</head>
+<body style="margin:0;background:transparent;overflow:hidden">
+<script>
+let activeAudio = null;
+let ready = false;
+
+function resourceName() {
+    try { return GetParentResourceName(); } catch (_) { return 'hf1_npcs'; }
+}
+
+async function post(name, data) {
+    const r = await fetch(`https://${resourceName()}/${name}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: JSON.stringify(data || {})
+    });
+    return r;
+}
+
+async function announce() {
+    try {
+        const r = await post('dialogueSoundReady', { ok: true });
+        if (r && r.ok) ready = true;
+    } catch (_) {}
+}
+
+setInterval(() => { if (!ready) announce(); }, 1000);
+window.addEventListener('DOMContentLoaded', announce);
+window.addEventListener('load', announce);
+
+function fail(sound, reason) {
+    post('dialogueSoundError', {sound, reason: String(reason || 'Playback failed')}).catch(() => {});
+}
+
+function stopCurrent() {
+    if (!activeAudio) return;
+    try { activeAudio.pause(); activeAudio.currentTime = 0; } catch (_) {}
+    activeAudio = null;
+}
+
+async function play(sound, volume) {
+    if (!/^[A-Za-z0-9_.-]+\.ogg$/i.test(sound) || sound.includes('..')) {
+        fail(sound, 'Invalid sound filename');
+        return;
+    }
+
+    stopCurrent();
+    const audio = new Audio(`sounds/${encodeURIComponent(sound)}`);
+    audio.preload = 'auto';
+    audio.volume = Math.max(0, Math.min(1, Number(volume) || 0.65));
+    activeAudio = audio;
+
+    try {
+        await audio.play();
+        post('dialogueSoundDebug', {stage:'playing', sound, url:audio.src}).catch(() => {});
+    } catch (e) {
+        activeAudio = null;
+        fail(sound, e && e.message ? e.message : 'audio.play() rejected');
+    }
+}
+
+window.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (data.action === 'soundNuiPing') {
+        announce();
+        return;
+    }
+    if (data.action === 'playDialogueSound') {
+        post('dialogueSoundDebug', {stage:'received', sound:String(data.sound || '')}).catch(() => {});
+        play(String(data.sound || ''), data.volume);
+    }
+});
+</script>
+</body>
+</html>
