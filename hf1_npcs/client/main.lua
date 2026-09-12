@@ -40,6 +40,26 @@ function NPCManager.LoadModel(model)
 end
 
 
+local function isConfiguredDialogueSound(soundName)
+    if type(soundName) ~= 'string' or soundName == '' then return false end
+    local configured = Config.DialogueSounds or {}
+    for i = 1, #configured do
+        if type(configured[i]) == 'table' and configured[i].value == soundName then
+            return true
+        end
+    end
+    return false
+end
+
+local function playDialogueSound(soundName)
+    if not isConfiguredDialogueSound(soundName) then return end
+    SendNUIMessage({
+        action = 'playDialogueSound',
+        sound = soundName,
+        volume = math.max(0.0, math.min(1.0, tonumber(Config.DialogueSoundVolume) or 0.65)),
+    })
+end
+
 local function triggerNpcClientEvent(eventName, npc, entity, reply)
     if not eventName or eventName == '' then return end
     TriggerEvent(eventName, {
@@ -161,6 +181,8 @@ local function openNpcDialogue(npc, entity)
                         icon = capturedAllowed and (capturedReply.icon or 'fa-solid fa-reply') or 'fa-solid fa-lock',
                         disabled = not capturedAllowed,
                         onSelect = capturedAllowed and function()
+                            playDialogueSound(capturedReply.sound)
+
                             local function doAction()
                                 runDialogueAction(capturedReply, npc, entity, showNode, nodeIndex)
                             end
@@ -229,7 +251,16 @@ local function setupTarget(npc, entity)
             icon = npc.target.icon or 'fa-solid fa-user',
             label = npc.target.label or 'Interact',
             distance = 2.5,
+            canInteract = function(targetEntity)
+                return targetEntity ~= 0
+                    and DoesEntityExist(targetEntity)
+                    and not IsEntityDead(targetEntity)
+                    and not IsPedDeadOrDying(targetEntity, true)
+            end,
             onSelect = function(data)
+                if not data.entity or data.entity == 0 or not DoesEntityExist(data.entity) then return end
+                if IsEntityDead(data.entity) or IsPedDeadOrDying(data.entity, true) then return end
+
                 local mode = npc.target.mode or ((npc.dialogue and npc.dialogue.enabled) and 'talk' or 'event')
                 if mode == 'talk' then
                     openNpcDialogue(npc, data.entity)
@@ -402,12 +433,18 @@ CreateThread(function()
                 if not entity or not DoesEntityExist(entity) then
                     spawnLocalNpc(npc)
                 else
-                    -- Re-assert long-running scenarios/animations if GTA clears them.
-                    if npc.scenario and npc.scenario ~= '' and not IsPedUsingScenario(entity, npc.scenario) then
-                        TaskStartScenarioInPlace(entity, npc.scenario, 0, true)
-                    elseif npc.animDict and npc.animDict ~= '' and npc.animName ~= ''
-                        and not IsEntityPlayingAnim(entity, npc.animDict, npc.animName, 3) then
-                        NPCManager.ApplyToEntity(npc, entity)
+                    -- Dead NPCs must no longer expose ox_target options. Leave the corpse
+                    -- in-world until normal streaming cleanup, but never restart behaviour.
+                    if IsEntityDead(entity) or IsPedDeadOrDying(entity, true) then
+                        clearTarget(id, entity)
+                    else
+                        -- Re-assert long-running scenarios/animations if GTA clears them.
+                        if npc.scenario and npc.scenario ~= '' and not IsPedUsingScenario(entity, npc.scenario) then
+                            TaskStartScenarioInPlace(entity, npc.scenario, 0, true)
+                        elseif npc.animDict and npc.animDict ~= '' and npc.animName ~= ''
+                            and not IsEntityPlayingAnim(entity, npc.animDict, npc.animName, 3) then
+                            NPCManager.ApplyToEntity(npc, entity)
+                        end
                     end
                 end
             elseif entity and DoesEntityExist(entity) and dist > (spawnDistance + 25.0) then

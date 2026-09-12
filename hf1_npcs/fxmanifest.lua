@@ -3,9 +3,18 @@ game 'gta5'
 
 author 'OpenAI / ChatGPT'
 description 'Persistent NPC creator and manager for Qbox using ox_lib and oxmysql'
-version '1.2.0-talk-conditions'
+version '1.3.0-dialogue-sounds'
 
 lua54 'yes'
+
+ui_page 'html/index.html'
+
+files {
+    'html/index.html',
+    'html/app.js',
+    'html/sounds/*.ogg',
+    'html/sounds/README.txt'
+}
 
 shared_scripts {
     '@ox_lib/init.lua',

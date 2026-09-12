@@ -62,6 +62,7 @@ local function sanitizeNpc(data, requireId)
             label = label,
             icon = sanitizeString(reply.icon, 80),
             response = sanitizeString(reply.response, 500),
+            sound = sanitizeString(reply.sound, 120),
             action = action,
             event = sanitizeString(reply.event, 120),
             command = sanitizeString(reply.command, 120):gsub('^/', ''),

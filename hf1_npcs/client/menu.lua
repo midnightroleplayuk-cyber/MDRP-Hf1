@@ -131,6 +131,34 @@ local function replyIconOptions(existingIcon)
     return options
 end
 
+local function dialogueSoundOptions(existingSound)
+    local options = {
+        { label = 'No custom sound', value = '' },
+    }
+    local found = existingSound == nil or existingSound == ''
+
+    local configured = Config.DialogueSounds or {}
+    for i = 1, #configured do
+        local entry = configured[i]
+        if type(entry) == 'table' and entry.value and entry.value ~= '' then
+            options[#options + 1] = {
+                label = entry.label or entry.value,
+                value = entry.value,
+            }
+            if entry.value == existingSound then found = true end
+        end
+    end
+
+    if existingSound and existingSound ~= '' and not found then
+        table.insert(options, 2, {
+            label = ('Current/custom sound — %s'):format(existingSound),
+            value = existingSound,
+        })
+    end
+
+    return options
+end
+
 local function replyActionForExisting(reply)
     if reply.action and reply.action ~= '' then return reply.action end
     if reply.nextStep and tonumber(reply.nextStep) then return 'branch' end
@@ -231,6 +259,12 @@ local function editDialogueReply(old, replyNumber, stepCount)
             default = old.response or '', max = 500, autosize = true,
         },
         {
+            type = 'select', label = 'Response sound',
+            description = 'Optional .ogg sound played locally when the player chooses this reply.',
+            options = dialogueSoundOptions(old.sound or ''),
+            default = old.sound or '', clearable = false, required = true,
+        },
+        {
             type = 'select', label = 'What should this reply do?',
             description = 'Choose the result without needing to know Lua.',
             options = {
@@ -246,9 +280,9 @@ local function editDialogueReply(old, replyNumber, stepCount)
     }, { size = 'md' })
     if not basic then return nil end
 
-    local action = basic[4] or 'close'
+    local action = basic[5] or 'close'
     local result = {
-        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '',
+        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '', sound = basic[4] or '',
         action = action, event = '', command = '', nextStep = nil, close = action ~= 'back' and action ~= 'branch',
     }
 

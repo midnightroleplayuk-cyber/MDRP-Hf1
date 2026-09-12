@@ -53,4 +53,16 @@ Config.Sync = {
     refreshInterval = 1500,
 }
 
+
+-- Optional dialogue response sounds.
+-- Put .ogg files in html/sounds/ and add them here so admins can select them.
+-- Example:
+-- { label = 'Gang - Deal accepted', value = 'gang_accept.ogg' },
+-- { label = 'Dealer - Thanks', value = 'dealer_thanks.ogg' },
+Config.DialogueSounds = {
+}
+
+-- Local volume for dialogue response sounds (0.0 - 1.0).
+Config.DialogueSoundVolume = 0.65
+
 Config.Debug = false
