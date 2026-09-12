@@ -541,25 +541,41 @@ local function getBehavior(existing, npcName)
     }
 end
 
+local blockedPedModels = {
+    mp_f_freemode_01 = true,
+    mp_m_freemode_01 = true,
+}
+
+local function isBlockedPedModel(model)
+    return type(model) == 'string' and blockedPedModels[model:lower()] == true
+end
+
+local function trimPedModel(model)
+    if type(model) ~= 'string' then return '' end
+    return model:match('^%s*(.-)%s*$') or ''
+end
+
 local function pedModelOptions(existingModel)
     local options = {}
     local hasExisting = not existingModel
 
     for i = 1, #PedCatalog do
         local ped = PedCatalog[i]
-        options[#options + 1] = {
-            label = ('%s — %s'):format(ped.model, ped.label),
-            value = ped.model,
-        }
+        if ped.model and not isBlockedPedModel(ped.model) then
+            options[#options + 1] = {
+                label = ped.label and ped.label ~= ped.model and ('%s — %s'):format(ped.model, ped.label) or ped.model,
+                value = ped.model,
+            }
 
-        if existingModel and ped.model == existingModel then
-            hasExisting = true
+            if existingModel and ped.model:lower() == existingModel:lower() then
+                hasExisting = true
+            end
         end
     end
 
-    if existingModel and not hasExisting then
+    if existingModel and not hasExisting and not isBlockedPedModel(existingModel) then
         options[#options + 1] = {
-            label = ('%s — Current saved model'):format(existingModel),
+            label = ('%s — Current custom/streamed model'):format(existingModel),
             value = existingModel,
         }
     end
@@ -567,6 +583,12 @@ local function pedModelOptions(existingModel)
     table.sort(options, function(a, b)
         return a.label:lower() < b.label:lower()
     end)
+
+    table.insert(options, 1, {
+        label = 'Custom / Streamed Ped Model...',
+        value = '__custom_ped_model__',
+        icon = 'fa-solid fa-plus',
+    })
 
     return options
 end
@@ -579,7 +601,7 @@ local function buildNpc(existing, replacingPosition)
         {
             type = 'select',
             label = 'Ped model',
-            description = 'Click the box to open the Cfx.re/FiveM ped list, then type to filter it.',
+            description = 'Search the full stock ped list, or choose Custom / Streamed Ped Model for an add-on ped.',
             options = pedModelOptions(existing and existing.model or nil),
             default = existing and existing.model or nil,
             searchable = true,
@@ -609,9 +631,37 @@ local function buildNpc(existing, replacingPosition)
         return nil
     end
 
+    if model == '__custom_ped_model__' then
+        local custom = lib.inputDialog('Custom / Streamed Ped Model', {
+            {
+                type = 'input',
+                label = 'Ped model name',
+                description = 'Enter the exact spawn/model name from your streamed ped resource.',
+                placeholder = 'example_custom_ped',
+                required = true,
+                min = 1,
+                max = 120,
+            },
+        })
+        if not custom then return nil end
+        model = trimPedModel(custom[1])
+    else
+        model = trimPedModel(model)
+    end
+
+    if model == '' then
+        NPCManager.Notify('Please enter a ped model.', 'error')
+        return nil
+    end
+
+    if isBlockedPedModel(model) then
+        NPCManager.Notify('The freemode player ped models are intentionally disabled for NPCs.', 'error')
+        return nil
+    end
+
     local hash = joaat(model)
     if not IsModelInCdimage(hash) or not IsModelValid(hash) or not IsModelAPed(hash) then
-        NPCManager.Notify('That ped model is invalid.', 'error')
+        NPCManager.Notify('That ped model is not currently available as a valid ped. For custom peds, make sure its resource is started first.', 'error')
         return nil
     end
 

@@ -1,9 +1,9 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'HF1'
-description 'NPC Creator & Interaction Script for QBOX framework.'
-version '1.4.0'
+author 'OpenAI / ChatGPT'
+description 'Persistent NPC creator and manager for Qbox using ox_lib and oxmysql'
+version '1.3.0-dialogue-sounds'
 
 lua54 'yes'
 
