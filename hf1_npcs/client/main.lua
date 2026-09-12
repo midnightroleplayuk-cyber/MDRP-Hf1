@@ -77,6 +77,15 @@ RegisterNUICallback('dialogueSoundReady', function(_, cb)
     cb({ ok = true })
 end)
 
+CreateThread(function()
+    Wait(1000)
+    for _ = 1, 8 do
+        if soundNuiReady then break end
+        SendNUIMessage({ action = 'soundNuiPing' })
+        Wait(750)
+    end
+end)
+
 RegisterNUICallback('dialogueSoundDebug', function(data, cb)
     local stage = type(data) == 'table' and tostring(data.stage or 'unknown') or 'unknown'
     local sound = type(data) == 'table' and tostring(data.sound or '') or ''
@@ -99,7 +108,21 @@ RegisterCommand('hf1npctestsound', function(_, args)
         return
     end
 
+    if not soundNuiReady then
+        SendNUIMessage({ action = 'soundNuiPing' })
+        local timeout = GetGameTimer() + 2500
+        while not soundNuiReady and GetGameTimer() < timeout do
+            Wait(100)
+        end
+    end
+
     NPCManager.Notify(('Sending test sound: %s | NUI ready: %s'):format(soundName, soundNuiReady and 'yes' or 'no'), 'inform')
+
+    if not soundNuiReady then
+        NPCManager.Notify('Dialogue sound NUI did not respond. Check F8 for NUI errors.', 'error')
+        return
+    end
+
     playDialogueSound(soundName)
 end, false)
 

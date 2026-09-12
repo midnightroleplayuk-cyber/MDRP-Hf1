@@ -12,8 +12,28 @@ function postNui(name, payload = {}) {
     }
 }
 
+let nuiReadyConfirmed = false;
+
+async function announceReady() {
+    if (nuiReadyConfirmed) return;
+
+    try {
+        const response = await postNui('dialogueSoundReady', { ok: true });
+        if (response && response.ok) {
+            nuiReadyConfirmed = true;
+        }
+    } catch (_) {}
+}
+
 window.addEventListener('load', () => {
-    postNui('dialogueSoundReady', { ok: true }).catch(() => {});
+    announceReady();
+    const timer = setInterval(() => {
+        if (nuiReadyConfirmed) {
+            clearInterval(timer);
+            return;
+        }
+        announceReady();
+    }, 750);
 });
 
 function reportSoundError(sound, reason) {
@@ -92,6 +112,12 @@ function tryPlaySound(sound, volume, urls, index = 0) {
 
 window.addEventListener('message', (event) => {
     const data = event.data || {};
+
+    if (data.action === 'soundNuiPing') {
+        postNui('dialogueSoundReady', { ok: true, ping: true }).catch(() => {});
+        return;
+    }
+
     if (data.action !== 'playDialogueSound') return;
 
     const sound = String(data.sound || '');
