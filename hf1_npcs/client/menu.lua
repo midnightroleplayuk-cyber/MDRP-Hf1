@@ -262,7 +262,7 @@ local function editDialogueReply(old, replyNumber, stepCount)
             type = 'select', label = 'Response sound',
             description = 'Optional .ogg sound played locally when the player chooses this reply.',
             options = dialogueSoundOptions(old.sound or ''),
-            default = old.sound or '', clearable = false, required = true,
+            default = old.sound or '', clearable = false,
         },
         {
             type = 'select', label = 'What should this reply do?',
@@ -282,7 +282,7 @@ local function editDialogueReply(old, replyNumber, stepCount)
 
     local action = basic[5] or 'close'
     local result = {
-        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '', sound = basic[4] or '',
+        label = basic[1] or '', icon = basic[2] or 'fa-solid fa-reply', response = basic[3] or '', sound = (basic[4] == 'none' and '' or (basic[4] or '')),
         action = action, event = '', command = '', nextStep = nil, close = action ~= 'back' and action ~= 'branch',
     }
 
