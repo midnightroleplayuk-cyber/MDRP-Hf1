@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'HF1'
 description 'Dedicated dialogue sound player for hf1_npcs'
-version '1.0.0'
+version '1.0.1'
 
 ui_page 'html/index.html'
 
