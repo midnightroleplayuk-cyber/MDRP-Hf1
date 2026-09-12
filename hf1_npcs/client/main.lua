@@ -60,6 +60,13 @@ local function playDialogueSound(soundName)
     })
 end
 
+RegisterNUICallback('dialogueSoundError', function(data, cb)
+    local sound = type(data) == 'table' and tostring(data.sound or '') or ''
+    local reason = type(data) == 'table' and tostring(data.reason or 'Playback failed') or 'Playback failed'
+    NPCManager.Notify(('Could not play dialogue sound %s: %s'):format(sound ~= '' and sound or '(unknown)', reason), 'error')
+    cb({ ok = true })
+end)
+
 local function triggerNpcClientEvent(eventName, npc, entity, reply)
     if not eventName or eventName == '' then return end
     TriggerEvent(eventName, {
