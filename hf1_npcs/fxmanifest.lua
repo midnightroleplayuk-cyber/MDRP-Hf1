@@ -15,7 +15,6 @@ shared_scripts {
 }
 
 client_scripts {
-    'client/bridges/osp_ambulance.lua',
     'client/main.lua',
     'client/placement.lua',
     'client/menu.lua'

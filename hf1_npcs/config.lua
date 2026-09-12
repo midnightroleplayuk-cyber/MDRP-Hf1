@@ -55,7 +55,7 @@ Config.Sync = {
 
 
 -- Optional dialogue response sounds.
--- Put .ogg files in hf1_npc_sounds/html/sounds/ and add them here so admins can select them.
+-- Put .ogg files in html/sounds/ and add them here so admins can select them.
 -- Example:
 -- { label = 'Gang - Deal accepted', value = 'gang_accept.ogg' },
 -- { label = 'Dealer - Thanks', value = 'dealer_thanks.ogg' },
@@ -65,15 +65,5 @@ Config.DialogueSounds = {
 
 -- Local volume for dialogue response sounds (0.0 - 1.0).
 Config.DialogueSoundVolume = 0.65
-
--- Optional third-party integrations.
-Config.Integrations = {
-    OSPAmbulance = {
-        resource = 'osp_ambulance',
-        -- OSP hospital ID used by hf1_npcs:client:ospCheckIn.
-        -- In the supplied OSP Ambulance V2 config, Pillbox is hospital 1.
-        hospitalID = 1,
-    },
-}
 
 Config.Debug = false
