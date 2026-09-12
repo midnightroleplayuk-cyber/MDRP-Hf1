@@ -162,8 +162,8 @@ local function openNpcDialogue(npc, entity)
         local menuId = ('hf1_npcs:dialogue:%s:node:%s'):format(npc.id, nodeIndex)
         local options = {
             {
-                title = ('%s Says:'):format(npc.name or 'NPC'),
-                description = text,
+                title = text,
+                description = ('%s Says:'):format(npc.name or 'NPC'),
                 icon = 'fa-solid fa-comment-dots',
                 readOnly = true,
             }
@@ -210,7 +210,7 @@ local function openNpcDialogue(npc, entity)
                                     options = {
                                         {
                                             title = capturedReply.response,
-                                            description = ('— %s'):format(npc.name or 'NPC'),
+                                            description = ('%s Says:'):format(npc.name or 'NPC'),
                                             icon = 'fa-solid fa-comment-dots',
                                             readOnly = true,
                                         },
