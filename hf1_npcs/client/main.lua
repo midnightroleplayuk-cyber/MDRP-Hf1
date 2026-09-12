@@ -209,8 +209,8 @@ local function openNpcDialogue(npc, entity)
                                     title = npc.name or 'NPC',
                                     options = {
                                         {
-                                            title = ('%s Says:'):format(npc.name or 'NPC'),
-                                            description = capturedReply.response,
+                                            title = capturedReply.response,
+                                            description = ('— %s'):format(npc.name or 'NPC'),
                                             icon = 'fa-solid fa-comment-dots',
                                             readOnly = true,
                                         },
