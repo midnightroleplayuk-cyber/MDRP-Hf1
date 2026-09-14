@@ -10,8 +10,13 @@ local function requestModel(model)
     end
 
     RequestModel(hash)
+    RequestCollisionForModel(hash)
     local deadline = GetGameTimer() + (Config.Streaming.modelLoadTimeout or 7000)
-    while not HasModelLoaded(hash) and GetGameTimer() < deadline do Wait(10) end
+    while (not HasModelLoaded(hash) or not HasCollisionForModelLoaded(hash)) and GetGameTimer() < deadline do
+        Wait(10)
+        RequestModel(hash)
+        RequestCollisionForModel(hash)
+    end
     if not HasModelLoaded(hash) then return nil end
     return hash
 end
@@ -33,14 +38,32 @@ local function spawnDefinition(def)
     end
 
     local c, r = def.coords, def.rotation
+    RequestCollisionAtCoord(c.x, c.y, c.z)
     local entity = CreateObjectNoOffset(hash, c.x, c.y, c.z, false, false, false)
     if entity == 0 then SetModelAsNoLongerNeeded(hash); return end
 
-    SetEntityRotation(entity, r.x, r.y, r.z, 2, true)
-    SetEntityCollision(entity, def.collision ~= false, def.collision ~= false)
-    FreezeEntityPosition(entity, def.frozen ~= false)
+    local collisionEnabled = def.collision ~= false
     SetEntityAsMissionEntity(entity, true, false)
+    SetEntityRotation(entity, r.x, r.y, r.z, 2, true)
+    SetEntityLoadCollisionFlag(entity, collisionEnabled, 1)
+    SetEntityRecordsCollisions(entity, collisionEnabled)
+    SetEntityCollision(entity, collisionEnabled, collisionEnabled)
+    FreezeEntityPosition(entity, def.frozen ~= false)
     spawned[def.id] = entity
+
+    -- GTA can finish loading an object's collision shortly after its drawable.
+    -- Re-apply the persisted state once after spawn so restarted/streamed props
+    -- cannot remain visible but non-solid. This is spawn-time only, not a loop.
+    CreateThread(function()
+        Wait(150)
+        if spawned[def.id] ~= entity or not DoesEntityExist(entity) then return end
+        RequestCollisionAtCoord(c.x, c.y, c.z)
+        SetEntityLoadCollisionFlag(entity, collisionEnabled, 1)
+        SetEntityRecordsCollisions(entity, collisionEnabled)
+        SetEntityCollision(entity, collisionEnabled, collisionEnabled)
+        FreezeEntityPosition(entity, def.frozen ~= false)
+    end)
+
     SetModelAsNoLongerNeeded(hash)
 end
 

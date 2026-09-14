@@ -78,3 +78,7 @@ Model search is done only when an admin requests it and returns at most the conf
 ## Notes
 
 Some entries in Rockstar's object catalogue are map/LOD/internal objects and may not be useful as ordinary placeable props. The client validates selected models before placement, and custom streamed props must be loaded by their own resource first.
+
+### QA fixes
+- Saved prop collision is explicitly loaded and re-applied when props stream in after a resource/server restart.
+- Left click can now be used repeatedly during placement to re-snap the prop to a new camera/raycast position before saving.
