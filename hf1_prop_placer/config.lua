@@ -12,6 +12,7 @@ Config.AcePermission = 'hf1_prop_placer.admin'
 Config.AllowedIdentifiers = {
     -- ['license:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] = true,
        ['fivem:1059188'] = true, --HARDY
+       ['fivem:17286926'] = true, --KAPPER
 }
 
 Config.Streaming = {
