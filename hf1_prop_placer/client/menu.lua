@@ -93,7 +93,7 @@ local function chooseModel()
             notify(('Please type at least %d characters.'):format(Config.Catalogue.MinimumSearchLength or 2), 'warning')
             return nil
         end
-        local result = lib.callback.await('hf1_props:server:searchModels', false, query, nil)
+        local result = lib.callback.await('hf1_prop_placer:server:searchModels', false, query, nil)
         return chooseFromResults(result, ('Results for "%s"'):format(query))
     end
 
@@ -114,7 +114,7 @@ local function chooseModel()
     })
     if not category then return nil end
 
-    local result = lib.callback.await('hf1_props:server:searchModels', false, trim(category[2] or ''), tonumber(category[1]))
+    local result = lib.callback.await('hf1_prop_placer:server:searchModels', false, trim(category[2] or ''), tonumber(category[1]))
     return chooseFromResults(result, Config.PropCategories[tonumber(category[1])].label)
 end
 
@@ -164,7 +164,7 @@ local function createNewProp()
         return
     end
 
-    TriggerServerEvent('hf1_props:server:create', {
+    TriggerServerEvent('hf1_prop_placer:server:create', {
         name = name,
         model = model,
         coords = placement.coords,
@@ -178,7 +178,7 @@ local openManageProp
 local openManageList
 
 local function saveDefinition(def)
-    TriggerServerEvent('hf1_props:server:update', def.id, def)
+    TriggerServerEvent('hf1_prop_placer:server:update', def.id, def)
 end
 
 openManageProp = function(id)
@@ -190,9 +190,9 @@ openManageProp = function(id)
     local def = copyDefinition(original)
 
     lib.registerContext({
-        id = 'hf1_props_manage_one',
+        id = 'hf1_prop_placer_manage_one',
         title = def.name,
-        menu = 'hf1_props_manage_list',
+        menu = 'hf1_prop_placer_manage_list',
         options = {
             {
                 title = 'Reposition / Rotate',
@@ -271,13 +271,13 @@ openManageProp = function(id)
                         labels = { confirm = 'Delete', cancel = 'Cancel' },
                     })
                     if confirm == 'confirm' then
-                        TriggerServerEvent('hf1_props:server:delete', def.id)
+                        TriggerServerEvent('hf1_prop_placer:server:delete', def.id)
                     end
                 end,
             },
         }
     })
-    lib.showContext('hf1_props_manage_one')
+    lib.showContext('hf1_prop_placer_manage_one')
 end
 
 openManageList = function(filter)
@@ -339,27 +339,27 @@ openManageList = function(filter)
     end
 
     lib.registerContext({
-        id = 'hf1_props_manage_list',
+        id = 'hf1_prop_placer_manage_list',
         title = ('Manage Props (%d)'):format(#list),
-        menu = 'hf1_props_admin',
+        menu = 'hf1_prop_placer_admin',
         options = options,
     })
-    lib.showContext('hf1_props_manage_list')
+    lib.showContext('hf1_prop_placer_manage_list')
 end
 
 local function openAdminMenu()
-    local allowed = lib.callback.await('hf1_props:server:hasAccess', false)
+    local allowed = lib.callback.await('hf1_prop_placer:server:hasAccess', false)
     if not allowed then
         notify('You do not have permission to use Prop Admin.', 'error')
         return
     end
 
-    local status = lib.callback.await('hf1_props:server:catalogueStatus', false) or {}
+    local status = lib.callback.await('hf1_prop_placer:server:catalogueStatus', false) or {}
     local count = status.count or 0
     local statusText = count > 0 and (('%s models available'):format(count)) or 'Catalogue loading...'
 
     lib.registerContext({
-        id = 'hf1_props_admin',
+        id = 'hf1_prop_placer_admin',
         title = 'Prop Admin',
         options = {
             {
@@ -379,7 +379,7 @@ local function openAdminMenu()
                 description = 'Reload all prop definitions from the database and resync clients.',
                 icon = 'fa-solid fa-rotate',
                 onSelect = function()
-                    TriggerServerEvent('hf1_props:server:reload')
+                    TriggerServerEvent('hf1_prop_placer:server:reload')
                 end,
             },
             {
@@ -390,7 +390,7 @@ local function openAdminMenu()
             },
         }
     })
-    lib.showContext('hf1_props_admin')
+    lib.showContext('hf1_prop_placer_admin')
 end
 
 RegisterCommand(Config.Command, function()

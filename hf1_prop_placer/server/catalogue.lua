@@ -39,7 +39,7 @@ local function installCatalogue(parsed, label)
     end
     sourceLabel = label or sourceLabel
     lastUpdate = os.time()
-    print(('[hf1_props] Prop catalogue ready: %d models (%s)'):format(#models, sourceLabel))
+    print(('[hf1_prop_placer] Prop catalogue ready: %d models (%s)'):format(#models, sourceLabel))
     return true
 end
 
@@ -58,22 +58,22 @@ local function refreshFromWeb()
 
     PerformHttpRequest(url, function(statusCode, body)
         if statusCode ~= 200 or type(body) ~= 'string' or #body < 1000 then
-            print(('[hf1_props] Catalogue update skipped (HTTP %s). Using %d cached models.'):format(statusCode or 'unknown', #models))
+            print(('[hf1_prop_placer] Catalogue update skipped (HTTP %s). Using %d cached models.'):format(statusCode or 'unknown', #models))
             return
         end
 
         local parsed = parseCatalogue(body)
         if #parsed < 1000 then
-            print(('[hf1_props] Catalogue update returned only %d models; keeping current cache.'):format(#parsed))
+            print(('[hf1_prop_placer] Catalogue update returned only %d models; keeping current cache.'):format(#parsed))
             return
         end
 
         installCatalogue(parsed, 'DurtyFree ObjectList.ini')
         local ok = SaveResourceFile(GetCurrentResourceName(), Config.Catalogue.CacheFile, body, #body)
         if ok == false then
-            print('[hf1_props] Warning: could not write catalogue cache file; current session still has the full list.')
+            print('[hf1_prop_placer] Warning: could not write catalogue cache file; current session still has the full list.')
         end
-    end, 'GET', '', { ['User-Agent'] = 'hf1_props/1.0' })
+    end, 'GET', '', { ['User-Agent'] = 'hf1_prop_placer/1.0' })
 end
 
 local function categoryMatches(modelLower, categoryIndex)

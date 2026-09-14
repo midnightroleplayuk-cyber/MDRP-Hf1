@@ -1,4 +1,4 @@
-# hf1_props
+# hf1_prop_placer
 
 Persistent, performance-minded prop placement and management for FiveM/Qbox servers.
 
@@ -25,19 +25,19 @@ Qbox is fine, but there is no hard qbx_core dependency; permissions use ACE so t
 
 ## Install
 
-1. Put `hf1_props` in your resources folder.
+1. Put `hf1_prop_placer` in your resources folder.
 2. Ensure dependencies start before it:
 
 ```cfg
 ensure ox_lib
 ensure oxmysql
-ensure hf1_props
+ensure hf1_prop_placer
 ```
 
 3. Grant admins access in `server.cfg`:
 
 ```cfg
-add_ace group.admin hf1_props.admin allow
+add_ace group.admin hf1_prop_placer.admin allow
 ```
 
 The SQL table is created automatically. `sql/install.sql` is included if you prefer manual SQL installation.

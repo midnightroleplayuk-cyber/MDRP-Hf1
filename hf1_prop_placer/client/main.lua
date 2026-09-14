@@ -28,7 +28,7 @@ local function spawnDefinition(def)
     if spawned[def.id] and DoesEntityExist(spawned[def.id]) then return end
     local hash = requestModel(def.model)
     if not hash then
-        if Config.Debug then print(('[hf1_props] Invalid/unavailable model: %s'):format(def.model)) end
+        if Config.Debug then print(('[hf1_prop_placer] Invalid/unavailable model: %s'):format(def.model)) end
         return
     end
 
@@ -72,7 +72,7 @@ function HF1Props.ValidateModel(model)
     return true
 end
 
-RegisterNetEvent('hf1_props:client:setCache', function(list)
+RegisterNetEvent('hf1_prop_placer:client:setCache', function(list)
     local incoming = {}
     for i = 1, #(list or {}) do
         local def = list[i]
@@ -95,7 +95,7 @@ RegisterNetEvent('hf1_props:client:setCache', function(list)
     definitions = incoming
 end)
 
-RegisterNetEvent('hf1_props:client:upsert', function(def)
+RegisterNetEvent('hf1_prop_placer:client:upsert', function(def)
     replaceDefinition(def)
     local id = tonumber(def.id)
     if not id then return end
@@ -108,20 +108,20 @@ RegisterNetEvent('hf1_props:client:upsert', function(def)
     end
 end)
 
-RegisterNetEvent('hf1_props:client:remove', function(id)
+RegisterNetEvent('hf1_prop_placer:client:remove', function(id)
     id = tonumber(id)
     if not id then return end
     deleteSpawned(id)
     definitions[id] = nil
 end)
 
-RegisterNetEvent('hf1_props:client:notify', function(description, kind)
+RegisterNetEvent('hf1_prop_placer:client:notify', function(description, kind)
     lib.notify({ title = 'Prop Admin', description = description, type = kind or 'inform' })
 end)
 
 CreateThread(function()
     Wait(500)
-    TriggerServerEvent('hf1_props:server:requestCache')
+    TriggerServerEvent('hf1_prop_placer:server:requestCache')
 
     while true do
         local ped = PlayerPedId()

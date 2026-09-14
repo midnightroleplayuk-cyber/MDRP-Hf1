@@ -1,6 +1,6 @@
 HF1PropDatabase = {}
 
-local TABLE_NAME = 'hf1_props'
+local TABLE_NAME = 'hf1_prop_placer'
 
 function HF1PropDatabase.EnsureTable()
     MySQL.query.await(([[
@@ -20,7 +20,7 @@ function HF1PropDatabase.EnsureTable()
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
-            KEY `idx_hf1_props_name` (`name`)
+            KEY `idx_hf1_prop_placer_name` (`name`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ]]):format(TABLE_NAME))
 end

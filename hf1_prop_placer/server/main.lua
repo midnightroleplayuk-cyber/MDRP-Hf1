@@ -62,7 +62,7 @@ local function loadCache()
         local def = rowToDefinition(rows[i])
         propCache[def.id] = def
     end
-    print(('[hf1_props] Loaded %d persistent props from database.'):format(#rows))
+    print(('[hf1_prop_placer] Loaded %d persistent props from database.'):format(#rows))
 end
 
 local function cacheAsArray()
@@ -78,11 +78,11 @@ MySQL.ready(function()
     databaseReady = true
 end)
 
-lib.callback.register('hf1_props:server:hasAccess', function(source)
+lib.callback.register('hf1_prop_placer:server:hasAccess', function(source)
     return HF1PropPermissions.HasAccess(source)
 end)
 
-lib.callback.register('hf1_props:server:searchModels', function(source, query, categoryIndex)
+lib.callback.register('hf1_prop_placer:server:searchModels', function(source, query, categoryIndex)
     if not HF1PropPermissions.HasAccess(source) then return nil end
     query = sanitizeString(query or '', 80)
     if query ~= '' and #query < (Config.Catalogue.MinimumSearchLength or 2) then
@@ -91,25 +91,25 @@ lib.callback.register('hf1_props:server:searchModels', function(source, query, c
     return HF1PropCatalogue.Search(query, categoryIndex)
 end)
 
-lib.callback.register('hf1_props:server:catalogueStatus', function(source)
+lib.callback.register('hf1_prop_placer:server:catalogueStatus', function(source)
     if not HF1PropPermissions.HasAccess(source) then return nil end
     return HF1PropCatalogue.GetStatus()
 end)
 
-RegisterNetEvent('hf1_props:server:requestCache', function()
+RegisterNetEvent('hf1_prop_placer:server:requestCache', function()
     local src = source
     if not databaseReady then
         CreateThread(function()
             local attempts = 0
             while not databaseReady and attempts < 50 do Wait(100); attempts = attempts + 1 end
-            TriggerClientEvent('hf1_props:client:setCache', src, cacheAsArray())
+            TriggerClientEvent('hf1_prop_placer:client:setCache', src, cacheAsArray())
         end)
         return
     end
-    TriggerClientEvent('hf1_props:client:setCache', src, cacheAsArray())
+    TriggerClientEvent('hf1_prop_placer:client:setCache', src, cacheAsArray())
 end)
 
-RegisterNetEvent('hf1_props:server:create', function(data)
+RegisterNetEvent('hf1_prop_placer:server:create', function(data)
     local src = source
     if not HF1PropPermissions.HasAccess(src) then return end
     local clean = sanitizeProp(data)
@@ -117,17 +117,17 @@ RegisterNetEvent('hf1_props:server:create', function(data)
 
     local id = HF1PropDatabase.Insert(clean, HF1PropPermissions.GetCreatorIdentifier(src))
     if not id then
-        TriggerClientEvent('hf1_props:client:notify', src, 'Unable to save prop to the database.', 'error')
+        TriggerClientEvent('hf1_prop_placer:client:notify', src, 'Unable to save prop to the database.', 'error')
         return
     end
 
     clean.id = tonumber(id)
     propCache[clean.id] = clean
-    TriggerClientEvent('hf1_props:client:upsert', -1, clean)
-    TriggerClientEvent('hf1_props:client:notify', src, ('Saved prop "%s".'):format(clean.name), 'success')
+    TriggerClientEvent('hf1_prop_placer:client:upsert', -1, clean)
+    TriggerClientEvent('hf1_prop_placer:client:notify', src, ('Saved prop "%s".'):format(clean.name), 'success')
 end)
 
-RegisterNetEvent('hf1_props:server:update', function(id, data)
+RegisterNetEvent('hf1_prop_placer:server:update', function(id, data)
     local src = source
     if not HF1PropPermissions.HasAccess(src) then return end
     id = tonumber(id)
@@ -138,11 +138,11 @@ RegisterNetEvent('hf1_props:server:update', function(id, data)
     HF1PropDatabase.Update(id, clean)
     clean.id = id
     propCache[id] = clean
-    TriggerClientEvent('hf1_props:client:upsert', -1, clean)
-    TriggerClientEvent('hf1_props:client:notify', src, ('Updated prop "%s".'):format(clean.name), 'success')
+    TriggerClientEvent('hf1_prop_placer:client:upsert', -1, clean)
+    TriggerClientEvent('hf1_prop_placer:client:notify', src, ('Updated prop "%s".'):format(clean.name), 'success')
 end)
 
-RegisterNetEvent('hf1_props:server:delete', function(id)
+RegisterNetEvent('hf1_prop_placer:server:delete', function(id)
     local src = source
     if not HF1PropPermissions.HasAccess(src) then return end
     id = tonumber(id)
@@ -151,14 +151,14 @@ RegisterNetEvent('hf1_props:server:delete', function(id)
 
     HF1PropDatabase.Delete(id)
     propCache[id] = nil
-    TriggerClientEvent('hf1_props:client:remove', -1, id)
-    TriggerClientEvent('hf1_props:client:notify', src, ('Deleted prop "%s".'):format(existing.name), 'success')
+    TriggerClientEvent('hf1_prop_placer:client:remove', -1, id)
+    TriggerClientEvent('hf1_prop_placer:client:notify', src, ('Deleted prop "%s".'):format(existing.name), 'success')
 end)
 
-RegisterNetEvent('hf1_props:server:reload', function()
+RegisterNetEvent('hf1_prop_placer:server:reload', function()
     local src = source
     if not HF1PropPermissions.HasAccess(src) then return end
     loadCache()
-    TriggerClientEvent('hf1_props:client:setCache', -1, cacheAsArray())
-    TriggerClientEvent('hf1_props:client:notify', src, 'Props reloaded from the database.', 'success')
+    TriggerClientEvent('hf1_prop_placer:client:setCache', -1, cacheAsArray())
+    TriggerClientEvent('hf1_prop_placer:client:notify', src, 'Props reloaded from the database.', 'success')
 end)

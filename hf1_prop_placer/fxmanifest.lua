@@ -1,7 +1,7 @@
 fx_version 'cerulean'
 game 'gta5'
 
-name 'hf1_props'
+name 'hf1_prop_placer'
 author 'HF1'
 description 'Persistent, streamed prop placement and management for Qbox/FiveM'
 version '1.0.0'

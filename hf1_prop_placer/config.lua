@@ -4,14 +4,14 @@ Config.Command = 'propadmin'
 
 -- ACE is the recommended permission method.
 -- Example server.cfg:
--- add_ace group.admin hf1_props.admin allow
-Config.AcePermission = 'hf1_props.admin'
+-- add_ace group.admin hf1_prop_placer.admin allow
+Config.AcePermission = 'hf1_prop_placer.admin'
 
 -- Optional identifier whitelist. ACE OR a matching identifier grants access.
 -- Supports license:, license2:, discord:, fivem:, etc.
 Config.AllowedIdentifiers = {
     -- ['license:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] = true,
-    ['fivem:1059188'] = true, --HARDY
+       ['fivem:1059188'] = true, --HARDY
 }
 
 Config.Streaming = {

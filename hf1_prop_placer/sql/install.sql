@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `hf1_props` (
+CREATE TABLE IF NOT EXISTS `hf1_prop_placer` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(100) NOT NULL,
     `model` VARCHAR(120) NOT NULL,
@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS `hf1_props` (
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
-    KEY `idx_hf1_props_name` (`name`)
+    KEY `idx_hf1_prop_placer_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
