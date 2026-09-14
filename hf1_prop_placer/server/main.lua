@@ -43,6 +43,24 @@ local function sanitizeProp(data)
     }
 end
 
+local function databaseBoolean(value, default)
+    if value == nil then return default == true end
+    if type(value) == 'boolean' then return value end
+    if type(value) == 'number' then return value ~= 0 end
+    if type(value) == 'string' then
+        local normalized = value:lower():match('^%s*(.-)%s*$')
+        if normalized == '1' or normalized == 'true' or normalized == 'yes' or normalized == 'on' then
+            return true
+        end
+        if normalized == '0' or normalized == 'false' or normalized == 'no' or normalized == 'off' or normalized == '' then
+            return false
+        end
+        local numeric = tonumber(normalized)
+        if numeric ~= nil then return numeric ~= 0 end
+    end
+    return default == true
+end
+
 local function rowToDefinition(row)
     return {
         id = tonumber(row.id),
@@ -50,8 +68,8 @@ local function rowToDefinition(row)
         model = tostring(row.model),
         coords = { x = tonumber(row.x) or 0.0, y = tonumber(row.y) or 0.0, z = tonumber(row.z) or 0.0 },
         rotation = { x = tonumber(row.rot_x) or 0.0, y = tonumber(row.rot_y) or 0.0, z = tonumber(row.rot_z) or 0.0 },
-        frozen = tonumber(row.frozen) == 1,
-        collision = tonumber(row.collision) == 1,
+        frozen = databaseBoolean(row.frozen, true),
+        collision = databaseBoolean(row.collision, true),
     }
 end
 

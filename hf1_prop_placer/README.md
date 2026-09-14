@@ -82,3 +82,10 @@ Some entries in Rockstar's object catalogue are map/LOD/internal objects and may
 ### QA fixes
 - Saved prop collision is explicitly loaded and re-applied when props stream in after a resource/server restart.
 - Left click can now be used repeatedly during placement to re-snap the prop to a new camera/raycast position before saving.
+
+
+## v1.3 restart collision fix
+Database boolean fields are now parsed robustly when loading saved props. This handles
+oxmysql/MySQL returning TINYINT(1) fields as booleans, numbers, or strings, preventing
+saved `collision = 1` props from being interpreted as collision-disabled after restart.
+The same robust parsing is used for the frozen flag.
