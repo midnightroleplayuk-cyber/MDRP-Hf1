@@ -26,7 +26,19 @@ function HF1PropDatabase.EnsureTable()
 end
 
 function HF1PropDatabase.LoadAll()
-    return MySQL.query.await(('SELECT * FROM `%s` ORDER BY `id` ASC'):format(TABLE_NAME)) or {}
+    -- Force TINYINT flags to come back as numeric 0/1. Depending on MySQL/oxmysql
+    -- settings, TINYINT(1) may otherwise be returned as Lua booleans after a
+    -- resource/server restart. rowToDefinition intentionally expects numbers.
+    return MySQL.query.await(([[
+        SELECT
+            `id`, `name`, `model`, `x`, `y`, `z`,
+            `rot_x`, `rot_y`, `rot_z`,
+            CAST(`frozen` AS UNSIGNED) AS `frozen`,
+            CAST(`collision` AS UNSIGNED) AS `collision`,
+            `created_by`, `created_at`, `updated_at`
+        FROM `%s`
+        ORDER BY `id` ASC
+    ]]):format(TABLE_NAME)) or {}
 end
 
 function HF1PropDatabase.Insert(data, creator)
