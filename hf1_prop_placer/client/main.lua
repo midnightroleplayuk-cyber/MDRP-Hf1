@@ -43,26 +43,42 @@ local function spawnDefinition(def)
     if entity == 0 then SetModelAsNoLongerNeeded(hash); return end
 
     local collisionEnabled = def.collision ~= false
-    SetEntityAsMissionEntity(entity, true, false)
+    SetEntityAsMissionEntity(entity, true, true)
     SetEntityRotation(entity, r.x, r.y, r.z, 2, true)
+
+    -- Apply collision BEFORE freezing. On restarted resources GTA can finish
+    -- loading the object's physics after the drawable has appeared.
     SetEntityLoadCollisionFlag(entity, collisionEnabled, 1)
     SetEntityRecordsCollisions(entity, collisionEnabled)
-    SetEntityCollision(entity, collisionEnabled, collisionEnabled)
+    SetEntityCollision(entity, collisionEnabled, true)
+    if collisionEnabled then ActivatePhysics(entity) end
     FreezeEntityPosition(entity, def.frozen ~= false)
     spawned[def.id] = entity
 
-    -- GTA can finish loading an object's collision shortly after its drawable.
-    -- Re-apply the persisted state once after spawn so restarted/streamed props
-    -- cannot remain visible but non-solid. This is spawn-time only, not a loop.
-    CreateThread(function()
-        Wait(150)
-        if spawned[def.id] ~= entity or not DoesEntityExist(entity) then return end
-        RequestCollisionAtCoord(c.x, c.y, c.z)
-        SetEntityLoadCollisionFlag(entity, collisionEnabled, 1)
-        SetEntityRecordsCollisions(entity, collisionEnabled)
-        SetEntityCollision(entity, collisionEnabled, collisionEnabled)
-        FreezeEntityPosition(entity, def.frozen ~= false)
-    end)
+    -- Bounded spawn-time settle pass. This is deliberately finite and only
+    -- runs for newly-streamed props; it is not a permanent/per-frame loop.
+    if collisionEnabled then
+        CreateThread(function()
+            local deadline = GetGameTimer() + 2500
+            repeat
+                Wait(200)
+                if spawned[def.id] ~= entity or not DoesEntityExist(entity) then return end
+                RequestCollisionAtCoord(c.x, c.y, c.z)
+                RequestCollisionForModel(hash)
+                SetEntityLoadCollisionFlag(entity, true, 1)
+                SetEntityRecordsCollisions(entity, true)
+                SetEntityCollision(entity, true, true)
+                ActivatePhysics(entity)
+                FreezeEntityPosition(entity, def.frozen ~= false)
+            until HasCollisionLoadedAroundEntity(entity) or GetGameTimer() >= deadline
+
+            -- One final assertion after the world/model collision reports ready.
+            if spawned[def.id] == entity and DoesEntityExist(entity) then
+                SetEntityCollision(entity, true, true)
+                FreezeEntityPosition(entity, def.frozen ~= false)
+            end
+        end)
+    end
 
     SetModelAsNoLongerNeeded(hash)
 end
@@ -161,6 +177,18 @@ CreateThread(function()
             if entity and DoesEntityExist(entity) then
                 if distSq > despawnDistance * despawnDistance then
                     deleteSpawned(id)
+                else
+                    -- Saved props can visually stream before their physics does after
+                    -- a script/server restart. Reassert collision only when the player
+                    -- is nearby, using this existing low-frequency streaming loop.
+                    local ensureDistance = Config.Streaming.collisionEnsureDistance or 35.0
+                    if def.collision ~= false and distSq <= ensureDistance * ensureDistance then
+                        RequestCollisionAtCoord(c.x, c.y, c.z)
+                        SetEntityLoadCollisionFlag(entity, true, 1)
+                        SetEntityRecordsCollisions(entity, true)
+                        SetEntityCollision(entity, true, true)
+                        FreezeEntityPosition(entity, def.frozen ~= false)
+                    end
                 end
             elseif distSq <= spawnDistance * spawnDistance then
                 spawnDefinition(def)

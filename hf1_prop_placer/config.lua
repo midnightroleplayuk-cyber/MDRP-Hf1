@@ -11,8 +11,8 @@ Config.AcePermission = 'hf1_prop_placer.admin'
 -- Supports license:, license2:, discord:, fivem:, etc.
 Config.AllowedIdentifiers = {
     -- ['license:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] = true,
-       ['fivem:1059188'] = true, --HARDY
-       ['fivem:17286926'] = true, --KAPPER
+    ['fivem:1059188'] = true, -- HARDY
+    ['fivem:17286926'] = true, -- KAPPER
 }
 
 Config.Streaming = {
@@ -20,6 +20,7 @@ Config.Streaming = {
     despawnDistance = 220.0,
     refreshInterval = 1500,
     modelLoadTimeout = 7000,
+    collisionEnsureDistance = 35.0, -- Reassert collision only when a player is close enough for it to matter.
 }
 
 Config.Placement = {
