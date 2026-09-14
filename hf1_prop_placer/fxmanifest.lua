@@ -1,4 +1,4 @@
-fx_version '1.3.0'
+fx_version 'cerulean'
 game 'gta5'
 
 name 'hf1_prop_placer'
